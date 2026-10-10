@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { brushCoverage, cutPatch, findSource, heal, type Plane } from './heal'
+import { blend, brushCoverage, cutPatch, findSource, heal, type Plane } from './heal'
 
 /** A deterministic noise field, so a test does not depend on Math.random. */
 function noise(seed: number) {
@@ -170,5 +170,46 @@ describe('cutPatch', () => {
     expect(patch.x + patch.width).toBeLessThanOrEqual(26)
     expect(patch.data.length).toBe(patch.width * patch.height * 4)
     expect(patch.data[0]).toBe(img.data[(patch.y * 50 + patch.x) * 4])
+  })
+})
+
+describe('blend', () => {
+  const brush = { points: [40, 40], radius: 16, feather: 0.3 }
+  const variance = (data: Uint8ClampedArray, width: number, box: number) => {
+    let sum = 0
+    let sq = 0
+    let n = 0
+    for (let y = 40 - box; y < 40 + box; y++) {
+      for (let x = 40 - box; x < 40 + box; x++) {
+        const v = data[(y * width + x) * 4]
+        sum += v
+        sq += v * v
+        n++
+      }
+    }
+    return sq / n - (sum / n) ** 2
+  }
+
+  it('does nothing at strength zero', () => {
+    const img = field(80, 80, 120, 0, 40)
+    const alpha = brushCoverage(brush, 80, 80)
+    expect(Array.from(blend(img, alpha, brush.radius, 0))).toEqual(Array.from(img.data))
+  })
+
+  it('blend flattens a colour blotch but keeps the texture on top of it', () => {
+    const img = field(80, 80, 120, 0, 24)
+    spot(img, 40, 40, 12, 50)
+    const alpha = brushCoverage(brush, 80, 80)
+    const out = blend(img, alpha, brush.radius, 100)
+
+    const mean = (data: Uint8ClampedArray, cx: number, cy: number) => {
+      let sum = 0
+      for (let y = cy - 3; y < cy + 3; y++) for (let x = cx - 3; x < cx + 3; x++) sum += data[(y * 80 + x) * 4]
+      return sum / 36
+    }
+    // The blotch in the middle is pulled up towards its surroundings...
+    expect(mean(out, 40, 40)).toBeGreaterThan(mean(img.data, 40, 40) + 20)
+    // ...and the grain is still there: the area has not been smeared flat.
+    expect(variance(out, 80, 5)).toBeGreaterThan(variance(img.data, 80, 5) * 0.4)
   })
 })

@@ -16,6 +16,7 @@ import { MaskOverlay } from './MaskOverlay'
 import { RetouchOverlay } from './RetouchOverlay'
 import { UpscaleBanner } from './UpscaleBanner'
 import { onFillFallback, retouchPatches } from '../retouch/retouch'
+import { blurCoverage } from '../retouch/coverage'
 
 /** Histogram readback size — enough bins to be representative, cheap to read. */
 const HISTOGRAM_EDGE = 192
@@ -326,6 +327,13 @@ export function Viewport() {
       live = false
     }
   }, [photo, activeFrameId, renderEdits.retouch, smartFill, toast, showUpscaled])
+
+  // The blur brush, rasterised for the detail pass. Only the strokes decide it,
+  // so a slider elsewhere never redraws the map.
+  const blurMap = useMemo(
+    () => (photo ? blurCoverage(renderEdits.retouch, photo.meta.width / photo.meta.height) : null),
+    [photo, renderEdits.retouch],
+  )
 
   useEffect(() => {
     onFillFallback(() => toast('Smart fill could not run, so that spot was healed instead', 'error'))
@@ -954,6 +962,7 @@ export function Viewport() {
     // the order the masks appear in, which is the order `packMasks` assigns
     // channels in — the two must not drift apart.
     renderer.setSubjectMaps(subjectMapsFor(renderEdits.masks, activeFrameId))
+    renderer.setRetouchBlur(blurMap)
 
     const look = getLook(renderEdits.look.id)
     // The overlay is a tool affordance, so it only exists while the tool is
@@ -972,7 +981,7 @@ export function Viewport() {
   }, [
     cssWidth, cssHeight, cssPhotoWidth, cssPhotoHeight, output.width,
     renderEdits, splitCompare, splitAt, cropping,
-    masking, maskOverlay, activeMaskId, activeFrameId, maskMapsAt, lensU, retouchAt,
+    masking, maskOverlay, activeMaskId, activeFrameId, maskMapsAt, lensU, retouchAt, blurMap,
   ])
 
   useEffect(() => {

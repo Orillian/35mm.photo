@@ -1,6 +1,6 @@
 /// <reference lib="webworker" />
 
-import { brushCoverage, cutPatch, findSource, heal, type Brush } from './heal'
+import { blend, brushCoverage, cutPatch, findSource, heal, type Brush } from './heal'
 
 /**
  * Healing, off the main thread. Each job is a few milliseconds on a preview,
@@ -27,7 +27,17 @@ interface HealRequest {
   dy: number
 }
 
-self.addEventListener('message', (event: MessageEvent<PlanRequest | HealRequest>) => {
+interface SmoothRequest {
+  kind: 'smooth'
+  id: number
+  rgba: Uint8ClampedArray
+  width: number
+  height: number
+  brush: Brush
+  strength: number
+}
+
+self.addEventListener('message', (event: MessageEvent<PlanRequest | HealRequest | SmoothRequest>) => {
   const request = event.data
   try {
     const img = { data: request.rgba, width: request.width, height: request.height }
@@ -36,6 +46,12 @@ self.addEventListener('message', (event: MessageEvent<PlanRequest | HealRequest>
     if (request.kind === 'plan') {
       const plan = findSource(img, alpha, request.brush.radius)
       self.postMessage({ id: request.id, ok: true, plan })
+      return
+    }
+
+    if (request.kind === 'smooth') {
+      const patch = cutPatch(blend(img, alpha, request.brush.radius, request.strength), alpha, request.width, request.height)
+      self.postMessage({ id: request.id, ok: true, patch }, patch ? [patch.data.buffer] : [])
       return
     }
 

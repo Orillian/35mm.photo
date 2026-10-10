@@ -44,7 +44,7 @@ import {
   type MaskKind,
   type RetouchStroke,
 } from './types'
-import { planStroke, prepareFillModel } from '../../retouch/retouch'
+import { DEFAULT_STRENGTH, planStroke, prepareFillModel } from '../../retouch/retouch'
 import { loadFillReady, loadSmartFill, saveSmartFill } from '../../retouch/preference'
 import { DEFAULT_BRUSH_SIZE } from '../../retouch/brush'
 import { MAX_PREVIEW_EDGE, decodeFile, makeThumbnail, previewBitmap } from '../../io/decode'
@@ -220,7 +220,7 @@ interface EditorState {
    * shorter edge, as a stroke stores it, so the brush covers the same part of
    * any photograph whatever its resolution.
    */
-  retouchBrush: { size: number; feather: number }
+  retouchBrush: { size: number; feather: number; mode: 'heal' | 'blend' | 'blur'; strength: number }
   /**
    * Whether a stroke a heal cannot hold may be handed to the fill model. A
    * preference, kept in this browser, and only in force once `fillReady`.
@@ -470,7 +470,7 @@ export const useEditor = create<EditorState>((set, get) => ({
   sheetDragging: false,
   maskOverlay: true,
   activeRetouchId: null,
-  retouchBrush: { size: DEFAULT_BRUSH_SIZE, feather: 50 },
+  retouchBrush: { size: DEFAULT_BRUSH_SIZE, feather: 50, mode: 'heal', strength: DEFAULT_STRENGTH },
   smartFill: loadSmartFill(),
   retouchPlanning: false,
   fillLoading: false,
@@ -925,11 +925,27 @@ export const useEditor = create<EditorState>((set, get) => ({
     // Nothing is detected to save a project; a mask not found yet carries nothing.
     const found = await foundSubjects(edits.masks, frameId)
 
+    // The photo is read in full *before* any file is asked for. Reading it for
+    // the first time inside the write meant a photo that could no longer be read
+    // failed halfway, after the save dialog had already made an empty file.
+    let source = file
+    if (kind !== 'json') {
+      try {
+        source = new File([await file.arrayBuffer()], file.name, {
+          type: file.type,
+          lastModified: file.lastModified,
+        })
+      } catch {
+        toast('Could not read the original photo to save it. Reopen the photo and try again.', 'error')
+        return
+      }
+    }
+
     if (kind === 'quick') {
       const target = saveTargets.get(frameId)
       if (target) {
         const { blob, filename } =
-          target.kind === 'project' ? projectFile(file, edits, meta, found) : sidecarFile(meta, edits)
+          target.kind === 'project' ? projectFile(source, edits, meta, found) : sidecarFile(meta, edits)
         if (await writeToHandle(target.handle, blob)) {
           get().markSidecarSaved()
           toast(`Saved ${filename}`)
@@ -946,7 +962,7 @@ export const useEditor = create<EditorState>((set, get) => ({
     }
     const outcome =
       kind === 'project'
-        ? await saveProject(file, edits, meta, found, options)
+        ? await saveProject(source, edits, meta, found, options)
         : await saveSidecar(meta, edits, options)
     if (outcome === 'cancelled') return
     get().markSidecarSaved()
@@ -1477,6 +1493,24 @@ export const useEditor = create<EditorState>((set, get) => ({
   async addRetouchStroke(stroke) {
     const { photo, activeFrameId, smartFill, fillReady } = get()
     if (!photo || !activeFrameId || stroke.points.length < 2) return
+
+    // A blend or a blur has nowhere to copy from, so there is nothing to plan.
+    const { mode: brushMode, strength } = get().retouchBrush
+    if (brushMode !== 'heal') {
+      const added: RetouchStroke = {
+        id: crypto.randomUUID(),
+        enabled: true,
+        points: stroke.points.map(round6),
+        size: round6(stroke.size),
+        feather: stroke.feather,
+        mode: brushMode,
+        strength,
+        dx: 0,
+        dy: 0,
+      }
+      get().update({ retouch: [...get().edits.retouch, added] }, `retouch-add-${added.id}`)
+      return
+    }
 
     set({ retouchPlanning: true })
     try {
@@ -2241,8 +2275,14 @@ function migrate(edits: Partial<EditState>): EditState {
         s.points.length >= 2 &&
         s.points.every(Number.isFinite) &&
         [s.size, s.feather, s.dx, s.dy].every(Number.isFinite) &&
-        (s.mode === 'heal' || s.mode === 'fill'),
-    ).map((s) => ({ ...s, enabled: s.enabled !== false })),
+        (s.mode === 'heal' || s.mode === 'fill' || s.mode === 'blend' || s.mode === 'blur'),
+    ).map((s) => ({
+      ...s,
+      enabled: s.enabled !== false,
+      ...(s.mode === 'blend' || s.mode === 'blur'
+        ? { strength: Number.isFinite(s.strength) ? s.strength : DEFAULT_STRENGTH }
+        : {}),
+    })),
     look: { ...base.look, ...(edits.look ?? {}) },
     crop: { ...base.crop, ...(edits.crop ?? {}) },
     // Its own line for the same reason every sub-object above has one: the

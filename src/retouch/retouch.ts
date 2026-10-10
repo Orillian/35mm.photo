@@ -47,6 +47,10 @@ export { FILL_MODEL }
  */
 const ALWAYS_HEAL_DIAMETER = 0.012
 
+import { DEFAULT_STRENGTH } from './brush'
+
+export { DEFAULT_STRENGTH }
+
 /** Context the model is shown around the hole, in multiples of its size. */
 const FILL_CONTEXT = 0.75
 const FILL_CONTEXT_MIN = 64
@@ -261,6 +265,37 @@ async function healStroke(
   return patch ? { ...patch, x: patch.x + rect.x0, y: patch.y + rect.y0 } : null
 }
 
+async function smoothStroke(
+  source: ImageBitmap,
+  stroke: RetouchStroke,
+  picture: Picture,
+  under: RetouchPatch[],
+): Promise<RetouchPatch | null> {
+  const b = strokeToStored(stroke, picture)
+  const brush = { points: b.points, radius: b.radius, feather: b.feather }
+  // Room around the brush for the blur to read from, which reaches about a radius.
+  const rect = clip(
+    grow(brushBounds(brush, Infinity, Infinity), Math.ceil(b.radius) + 4),
+    picture.storedWidth,
+    picture.storedHeight,
+  )
+  if (rect.x1 <= rect.x0 || rect.y1 <= rect.y0) return null
+
+  const rgba = readRegion(source, rect, under)
+  const { patch } = await healRpc.call<{ patch: RetouchPatch | null }>(
+    {
+      kind: 'smooth',
+      strength: stroke.strength ?? DEFAULT_STRENGTH,
+      rgba,
+      width: rect.x1 - rect.x0,
+      height: rect.y1 - rect.y0,
+      brush: localBrush(brush, rect),
+    },
+    [rgba.buffer],
+  )
+  return patch ? { ...patch, x: patch.x + rect.x0, y: patch.y + rect.y0 } : null
+}
+
 async function fillStroke(
   source: ImageBitmap,
   stroke: RetouchStroke,
@@ -320,6 +355,7 @@ function fingerprint(text: string): string {
 
 /** The mode a stroke is actually rendered with, given whether the model may be used. */
 function effectiveMode(stroke: RetouchStroke, allowFill: boolean): RetouchMode {
+  if (stroke.mode === 'blend' || stroke.mode === 'blur') return stroke.mode
   return stroke.mode === 'fill' && allowFill ? 'fill' : 'heal'
 }
 
@@ -379,6 +415,10 @@ export async function retouchPatches(
           if (!work) {
             const under = patches.slice()
             work = (async () => {
+              // A blur is drawn by the detail pass over the finished picture,
+              // not healed into the source — see `retouch/coverage.ts`.
+              if (mode === 'blur') return null
+              if (mode === 'blend') return smoothStroke(source, stroke, picture, under)
               if (mode === 'fill') {
                 try {
                   return await fillStroke(source, stroke, picture, under)

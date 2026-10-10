@@ -259,8 +259,13 @@ export async function saveBlob(
         types: [{ description: extension.toUpperCase(), accept: { [mimeType]: [`.${extension}`] } }],
       })
       const writable = await handle.createWritable()
-      await writable.write(blob)
-      await writable.close()
+      try {
+        await writable.write(blob)
+        await writable.close()
+      } catch (err) {
+        await writable.abort().catch(() => {})
+        throw err
+      }
       options.onHandle?.(handle)
       return 'saved'
     } catch (err) {
@@ -290,8 +295,13 @@ export async function writeToHandle(handle: FileSystemFileHandle, blob: Blob): P
     const permission = await handle.requestPermission?.({ mode: 'readwrite' })
     if (permission && permission !== 'granted') return false
     const writable = await handle.createWritable()
-    await writable.write(blob)
-    await writable.close()
+    try {
+      await writable.write(blob)
+      await writable.close()
+    } catch (err) {
+      await writable.abort().catch(() => {})
+      throw err
+    }
     return true
   } catch (err) {
     console.warn('[35mm] could not write in place', err)

@@ -1,9 +1,15 @@
 import { useEffect, useState } from 'react'
 import { Slider } from '../../app/ui/Slider'
 import { useEditor } from '../edit-stack/store'
-import { FILL_MODEL, isFillModelCached, onRetouchBusy } from '../../retouch/retouch'
+import { DEFAULT_STRENGTH, FILL_MODEL, isFillModelCached, onRetouchBusy } from '../../retouch/retouch'
 import { IconCross, IconEye, IconEyeOff } from '../../app/ui/icons'
 import { DEFAULT_BRUSH_SIZE, sizeToSlider, sliderToSize } from '../../retouch/brush'
+
+const BRUSH_HINT = {
+  heal: 'Paints out spots and dust by copying texture from nearby.',
+  blend: 'Evens out colour and tone into the surroundings, keeping the texture.',
+  blur: 'Softens the finished picture under the brush, on top of every other adjustment.',
+} as const
 
 export function RetouchTool() {
   const strokes = useEditor((s) => s.edits.retouch)
@@ -48,6 +54,35 @@ export function RetouchTool() {
             <span>Brush</span>
             {(busy || planning) && <span className="spinner retouch__spinner" aria-label="Healing" />}
           </header>
+          <div className="segmented">
+            {(
+              [
+                ['heal', 'Heal'],
+                ['blend', 'Blend'],
+                ['blur', 'Blur'],
+              ] as const
+            ).map(([mode, label]) => (
+              <button
+                key={mode}
+                className="segmented__item"
+                data-active={brush.mode === mode || undefined}
+                onClick={() => setBrush({ mode })}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <p className="tool__hint">{BRUSH_HINT[brush.mode]}</p>
+          {brush.mode !== 'heal' && (
+            <Slider
+              label="Strength"
+              value={brush.strength}
+              min={0}
+              max={100}
+              resetTo={DEFAULT_STRENGTH}
+              onChange={(v) => setBrush({ strength: v })}
+            />
+          )}
           <Slider
             label="Size"
             value={sizeToSlider(brush.size)}
@@ -124,7 +159,7 @@ export function RetouchTool() {
                       aria-pressed={stroke.id === activeId}
                     >
                       <span className="mask-row__name">Spot {i + 1}</span>
-                      <span className="mask-row__note">{stroke.mode === 'fill' ? 'fill' : 'heal'}</span>
+                      <span className="mask-row__note">{stroke.mode}</span>
                     </button>
                     <button
                       className="icon-button icon-button--quiet"
@@ -150,7 +185,18 @@ export function RetouchTool() {
             </ul>
           )}
 
-          {active && (
+          {active && (active.mode === 'blend' || active.mode === 'blur') && (
+            <Slider
+              label="Strength"
+              value={active.strength ?? DEFAULT_STRENGTH}
+              min={0}
+              max={100}
+              resetTo={DEFAULT_STRENGTH}
+              onChange={(v) => updateStroke(active.id, { strength: v }, `retouch-strength-${active.id}`)}
+            />
+          )}
+
+          {active && (active.mode === 'heal' || active.mode === 'fill') && (
             <div className="segmented">
               <button
                 className="segmented__item"

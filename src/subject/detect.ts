@@ -543,8 +543,10 @@ export async function restoreSubjects(
   const missing: Mask[] = []
   for (const mask of masks) {
     if (mask.kind !== 'subject') continue
-    if (cachedSubject(frameId, mask.model)) continue
-    if (await restoreSubject(frameId, mask.model)) restored++
+    // A map already in memory — carried in by a project file, or left from an
+    // earlier visit — counts as restored: the caller still has to prime the
+    // guide and the refinement for it, exactly as for one read back from disk.
+    if (cachedSubject(frameId, mask.model) || (await restoreSubject(frameId, mask.model))) restored++
     else missing.push(mask)
   }
   return { restored, missing }

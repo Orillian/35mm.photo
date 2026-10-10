@@ -30,6 +30,7 @@ import { swapsAxes, type Orientation } from '../../io/exif'
 import { IDENTITY_LENS, type LensUniforms } from '../../lens/uniforms'
 import { whiteBalanceGain } from './whitebalance'
 import type { RetouchPatch } from '../../retouch/retouch'
+import type { BlurMap } from '../../retouch/coverage'
 import type { Region } from '../../upscale/region'
 
 /**
@@ -45,6 +46,9 @@ const SOFT_UNIT = 6
  * budget even though it is past the scratch unit.
  */
 const SOFT_NEAR_UNIT = 8
+
+/** Where the blur brush's coverage is bound for the detail pass. */
+const RETOUCH_BLUR_UNIT = 9
 
 /**
  * Short edge, in pixels, of the reduced copy a mask's blur is computed at.
@@ -138,6 +142,9 @@ export class Renderer {
    * and every render with the retouch chip's eye shut still need the original.
    */
   private retouchTexture: WebGLTexture | null = null
+  /** The blur brush's coverage, and the map it was uploaded from, so a redraw skips the upload. */
+  private retouchBlurTexture: WebGLTexture | null = null
+  private retouchBlurMap: BlurMap | null = null
   /** What `retouchTexture` currently holds, so a redraw does not re-upload it. */
   private retouchKey = ''
   private retouchSize = { w: 0, h: 0 }
@@ -414,6 +421,29 @@ export class Renderer {
    * every later stage — lens correction, geometry, the grade — sees a picture
    * that simply never had the spots.
    */
+  /**
+   * Where the blur brush has been. Read by the detail pass, which defocuses
+   * the graded picture there — the one retouch that sits on top of the edit
+   * rather than under it. Always leaves a texture bound, if only a blank one,
+   * because a sampler pointing at nothing is undefined in some drivers.
+   */
+  setRetouchBlur(map: BlurMap | null) {
+    if (map === this.retouchBlurMap && this.retouchBlurTexture) return
+    const gl = this.gl
+    this.retouchBlurMap = map
+    const upload = map ?? BLANK_BLUR
+    if (!this.retouchBlurTexture) this.retouchBlurTexture = gl.createTexture()
+    gl.activeTexture(gl.TEXTURE0 + SCRATCH_UNIT)
+    gl.bindTexture(gl.TEXTURE_2D, this.retouchBlurTexture)
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 0)
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1)
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, upload.width, upload.height, 0, gl.RED, gl.UNSIGNED_BYTE, upload.data)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+  }
+
   setRetouch(patches: RetouchPatch[] | null, key: string) {
     const gl = this.gl
     if (!patches?.length || !this.imageTexture) {
@@ -597,15 +627,8 @@ export class Renderer {
     parts: { tone?: boolean; detail?: boolean } = {},
   ) {
     u.i('uMaskCount', packed.count)
-    if (packed.count === 0) return
-
-    // Unit 5: the detail pass already holds 0–4, and 7 is the scratch unit the
-    // upload helpers borrow. Bound for every mask-reading pass whether or not a
-    // subject mask is present, because a sampler left pointing at nothing is
-    // undefined behaviour in some drivers rather than simply unused.
-    this.bindTexture(SUBJECT_UNIT, this.gl.TEXTURE_2D, this.subjectTexture)
-    u.i('uSubject', SUBJECT_UNIT)
-
+    // The transform goes in whatever the count: the blur brush reads the same
+    // upright uv the masks do, and it can be there when no mask is.
     u.mat3(
       'uMaskTransform',
       this.uprightWidth
@@ -620,6 +643,15 @@ export class Renderer {
     // The *upright* aspect, not the displayed one: a mask is anchored to the
     // picture, so a quarter turn must not reshape it.
     u.f('uMaskAspect', (this.uprightWidth || 1) / (this.uprightHeight || 1))
+    if (packed.count === 0) return
+
+    // Unit 5: the detail pass already holds 0–4, and 7 is the scratch unit the
+    // upload helpers borrow. Bound for every mask-reading pass whether or not a
+    // subject mask is present, because a sampler left pointing at nothing is
+    // undefined behaviour in some drivers rather than simply unused.
+    this.bindTexture(SUBJECT_UNIT, this.gl.TEXTURE_2D, this.subjectTexture)
+    u.i('uSubject', SUBJECT_UNIT)
+
     u.iv('uMaskKind', packed.kind)
     u.v4v('uMaskGeom', packed.geom)
     u.v4v('uMaskShape', packed.shape)
@@ -699,7 +731,11 @@ export class Renderer {
     const needsMid = edits.texture !== 0 || masked.mid
     const needsTight =
       edits.sharpen > 0 || edits.denoiseLuma > 0 || edits.denoiseChroma > 0 || masked.tight
-    if (!needsWide && !needsMid && !needsTight && !needsTone && !masked.soft) return source
+    // The blur brush wants the defocused copies too. Gated on the strokes, not
+    // the map alone: the before view hands in no strokes and must show none.
+    const brushBlur = this.retouchBlurMap !== null && edits.retouch.some((s) => s.enabled && s.mode === 'blur')
+    const needsSoft = masked.soft || brushBlur
+    if (!needsWide && !needsMid && !needsTight && !needsTone && !needsSoft) return source
 
     const gl = this.gl
     // Clarity and the dehaze veil estimate both want a radius that scales with
@@ -736,7 +772,7 @@ export class Renderer {
      * half of the slider shortens the focal distance and only the high half
      * deepens it.
      */
-    if (masked.soft) {
+    if (needsSoft) {
       // Down by halves while there is a long way to go: each step averages
       // where one long jump would point-sample, and aliasing the frame's own
       // noise into blotches is the one thing a blur cannot undo afterwards.
@@ -776,6 +812,10 @@ export class Renderer {
     this.bindTexture(4, gl.TEXTURE_2D, this.rtTone.texture)
     this.bindTexture(SOFT_UNIT, gl.TEXTURE_2D, this.rtSoft.texture)
     this.bindTexture(SOFT_NEAR_UNIT, gl.TEXTURE_2D, this.rtSoftNear.texture)
+    if (!this.retouchBlurTexture) this.setRetouchBlur(null)
+    this.bindTexture(RETOUCH_BLUR_UNIT, gl.TEXTURE_2D, this.retouchBlurTexture)
+    this.detailU.i('uRetouchBlur', RETOUCH_BLUR_UNIT)
+    this.detailU.i('uRetouchBlurOn', brushBlur ? 1 : 0)
     this.detailU.i('uImage', 0)
     this.detailU.i('uWideBlur', 1)
     this.detailU.i('uTightBlur', 2)
@@ -1074,6 +1114,7 @@ export class Renderer {
     if (this.lutTexture) gl.deleteTexture(this.lutTexture)
     if (this.subjectTexture) gl.deleteTexture(this.subjectTexture)
     if (this.retouchTexture) gl.deleteTexture(this.retouchTexture)
+    if (this.retouchBlurTexture) gl.deleteTexture(this.retouchBlurTexture)
     gl.deleteTexture(this.curveTexture)
     gl.deleteVertexArray(this.quad.vao)
     gl.deleteBuffer(this.quad.buffer)
@@ -1084,6 +1125,9 @@ export class Renderer {
 
 /** Uploaded in place of the real masks when a pass must ignore them. */
 const EMPTY_MASKS = packMasks([])
+
+/** What the blur sampler reads when no stroke has been painted: nothing, everywhere. */
+const BLANK_BLUR: BlurMap = { data: new Uint8ClampedArray(1), width: 1, height: 1 }
 
 /**
  * The "before" state: geometry kept, every adjustment dropped. Comparing

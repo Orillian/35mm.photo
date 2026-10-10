@@ -10,6 +10,7 @@ import { extensionOf } from './formats'
 import { attachExif } from './exif-write'
 import { ensureSubjectMaps } from '../subject/detect'
 import { retouchPatches } from '../retouch/retouch'
+import { blurCoverage } from '../retouch/coverage'
 import { fillEnabled } from '../retouch/preference'
 
 export type ExportFormat = 'jpeg' | 'png' | 'webp'
@@ -278,6 +279,9 @@ export async function renderToBlob(
     } else {
       renderer.setRetouch(null, '')
     }
+    // The blur brush goes on top, in the detail pass, so it is set here where
+    // the strokes are — the viewport sets the same map from the same strokes.
+    renderer.setRetouchBlur(blurCoverage(edits.retouch, meta.width / meta.height))
 
     // Through the cache, so the export reuses the cube the viewport already
     // built rather than resampling an imported LUT a second time.

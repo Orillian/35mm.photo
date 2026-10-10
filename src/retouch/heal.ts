@@ -384,6 +384,118 @@ export function heal(img: Plane, alpha: Float32Array, dx: number, dy: number): U
 }
 
 /**
+ * Low-pass the pixels of `rect`: three box passes each way, which is close
+ * enough to a gaussian that no one has found the difference, at a cost that
+ * does not grow with the radius. Edges clamp. Returns RGB, `rect` sized.
+ */
+function lowPass(img: Plane, rect: Rect, radius: number): Float32Array {
+  const w = rect.x1 - rect.x0
+  const h = rect.y1 - rect.y0
+  let a = new Float32Array(w * h * 3)
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const from = ((y + rect.y0) * img.width + x + rect.x0) * 4
+      const to = (y * w + x) * 3
+      a[to] = img.data[from]
+      a[to + 1] = img.data[from + 1]
+      a[to + 2] = img.data[from + 2]
+    }
+  }
+  let b = new Float32Array(a.length)
+  const r = Math.max(1, Math.round(radius * 0.58))
+  for (let pass = 0; pass < 3; pass++) {
+    boxPass(a, b, w, h, r, true)
+    boxPass(b, a, w, h, r, false)
+  }
+  b = a
+  return b
+}
+
+function boxPass(src: Float32Array, dst: Float32Array, w: number, h: number, r: number, horizontal: boolean) {
+  const lines = horizontal ? h : w
+  const length = horizontal ? w : h
+  const step = horizontal ? 3 : w * 3
+  const norm = 1 / (2 * r + 1)
+  for (let line = 0; line < lines; line++) {
+    const base = horizontal ? line * w * 3 : line * 3
+    for (let c = 0; c < 3; c++) {
+      const at = (i: number) => src[base + Math.min(length - 1, Math.max(0, i)) * step + c]
+      let sum = 0
+      for (let i = -r; i <= r; i++) sum += at(i)
+      for (let i = 0; i < length; i++) {
+        dst[base + i * step + c] = sum * norm
+        sum += at(i + r + 1) - at(i - r)
+      }
+    }
+  }
+}
+
+/**
+ * Even out tone and colour across the brushed area, leaving its texture alone.
+ *
+ * The slow variation inside the brush — a blotch, a colour cast, a seam between
+ * two patches — is replaced by the smoothest surface that meets the slow
+ * variation just outside it, while the fine detail on top is kept as it is.
+ * `strength` (0..100) is how much of the way to that surface it goes.
+ */
+export function blend(img: Plane, alpha: Float32Array, brushRadius: number, strength: number): Uint8ClampedArray {
+  const { width, height, data } = img
+  const out = new Uint8ClampedArray(data)
+  const hole = coverageBounds(alpha, width, height)
+  if (!hole) return out
+
+  const radius = Math.max(2, brushRadius * 0.4)
+  const margin = Math.ceil(radius * 1.8) + 2
+  const rect = {
+    x0: Math.max(0, hole.x0 - margin),
+    y0: Math.max(0, hole.y0 - margin),
+    x1: Math.min(width, hole.x1 + margin),
+    y1: Math.min(height, hole.y1 + margin),
+  }
+  const low = lowPass(img, rect, radius)
+  const rw = rect.x1 - rect.x0
+
+  // The surface is solved over the brush plus a pixel of known edge, as heal does.
+  const x0 = Math.max(0, hole.x0 - 1)
+  const y0 = Math.max(0, hole.y0 - 1)
+  const x1 = Math.min(width, hole.x1 + 1)
+  const y1 = Math.min(height, hole.y1 + 1)
+  const bw = x1 - x0
+  const bh = y1 - y0
+
+  const known = new Uint8Array(bw * bh)
+  const surface = [new Float32Array(bw * bh), new Float32Array(bw * bh), new Float32Array(bw * bh)]
+  for (let y = 0; y < bh; y++) {
+    for (let x = 0; x < bw; x++) {
+      const gx = x + x0
+      const gy = y + y0
+      if (alpha[gy * width + gx] > 0) continue
+      const i = y * bw + x
+      known[i] = 1
+      const f = ((gy - rect.y0) * rw + (gx - rect.x0)) * 3
+      for (let c = 0; c < 3; c++) surface[c][i] = low[f + c]
+    }
+  }
+  for (let c = 0; c < 3; c++) membrane(surface[c], known, bw, bh)
+
+  const mix = clamp01(strength / 100)
+  for (let y = 0; y < bh; y++) {
+    for (let x = 0; x < bw; x++) {
+      const gx = x + x0
+      const gy = y + y0
+      const a = alpha[gy * width + gx]
+      if (a <= 0) continue
+      const o = (gy * width + gx) * 4
+      const f = ((gy - rect.y0) * rw + (gx - rect.x0)) * 3
+      for (let c = 0; c < 3; c++) {
+        out[o + c] = data[o + c] + (surface[c][y * bw + x] - low[f + c]) * mix * a
+      }
+    }
+  }
+  return out
+}
+
+/**
  * Blend a filled buffer into the original through the brush's coverage, so a
  * feathered brush fades into its surroundings whatever did the filling.
  */

@@ -4,6 +4,9 @@
  * orders of magnitude apart, and a linear track would give the specks the
  * first millimetre of it.
  */
+/** Where a new blend or blur starts, and what a stored one without a strength means. */
+export const DEFAULT_STRENGTH = 50
+
 const SIZE_MIN = 0.002
 const SIZE_MAX = 0.15
 

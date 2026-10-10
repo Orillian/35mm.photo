@@ -20,7 +20,7 @@ vi.mock('../storage/indexeddb', () => ({
   }),
 }))
 
-const { cachedSubject, forgetSubjects, rememberSubject, restoreSubjects } = await import('./detect')
+const { cachedSubject, forgetSubjects, foundSubjects, rememberSubject, restoreSubjects } = await import('./detect')
 const { createMask } = await import('../editor/edit-stack/masks')
 type SubjectMask = import('../editor/edit-stack/types').SubjectMask
 
@@ -69,6 +69,19 @@ describe('reopening a photo', () => {
     expect(missing.map((m) => (m as SubjectMask).model)).toEqual(['other@9'])
   })
 
+  /**
+   * A project file puts its maps in memory *before* the photo opens. Counting
+   * those as nothing-to-do left the caller with no reason to prime the
+   * refinement, and the open sat on "Applying edits" until it timed out.
+   */
+  it('counts a map already in memory as restored, so the caller primes it', async () => {
+    const mask = subject()
+    rememberSubject('photo', mask.model, map(), false)
+    const { restored, missing } = await restoreSubjects([mask], 'photo')
+    expect(restored).toBe(1)
+    expect(missing).toEqual([])
+  })
+
   it('does not touch the disk for a map still in memory', async () => {
     const { loadSubject } = await import('../storage/indexeddb')
     const mask = subject()
@@ -76,5 +89,25 @@ describe('reopening a photo', () => {
     vi.mocked(loadSubject).mockClear()
     await restoreSubjects([mask], 'photo')
     expect(loadSubject).not.toHaveBeenCalled()
+  })
+})
+
+describe('the maps a project file carries', () => {
+  it('takes what is in memory or on disk, once per model, and skips what was never found', async () => {
+    const inMemory = subject()
+    const onDisk = { ...subject(), model: 'disk@1' }
+    const again = { ...subject(), model: 'disk@1' }
+    const never = { ...subject(), model: 'never@1' }
+    rememberSubject('photo', inMemory.model, map(), false)
+    store.set(`photo@disk@1`, { data: new Uint8ClampedArray(4).fill(9), size: 2 })
+
+    const found = await foundSubjects([inMemory, onDisk, again, never, createMask('radial', 1.5)], 'photo')
+    expect(found.map((f) => f.model)).toEqual([inMemory.model, 'disk@1'])
+    expect(found[1].map.data[0]).toBe(9)
+  })
+
+  it('never runs the detector — saving must not start a model', async () => {
+    const found = await foundSubjects([subject()], 'photo')
+    expect(found).toEqual([])
   })
 })

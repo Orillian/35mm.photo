@@ -361,7 +361,7 @@ export const MAX_MASKS = 8
  * time rather than per render is what makes the preview and the export the
  * same kind of answer.
  */
-export type RetouchMode = 'heal' | 'fill'
+export type RetouchMode = 'heal' | 'fill' | 'blend' | 'blur'
 
 export interface RetouchStroke {
   id: string
@@ -384,6 +384,10 @@ export interface RetouchStroke {
    */
   dx: number
   dy: number
+  /**
+   * How hard a blend or a blur works, 0..100. Heal and fill have no use for it.
+   */
+  strength?: number
   /** Which inpainting model filled it — part of the cache key, like a subject mask's. */
   model?: string
 }

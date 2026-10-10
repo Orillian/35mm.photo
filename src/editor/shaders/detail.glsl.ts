@@ -38,6 +38,9 @@ uniform float uDynamicRange;   // -1..1
 
 // clarity, texture, sharpen, blur
 uniform vec4 uMaskDetail[8];
+// Where the blur brush has been, in upright uv like a subject map (see retouch/coverage.ts).
+uniform sampler2D uRetouchBlur;
+uniform int uRetouchBlurOn;
 
 ${GLSL_COMMON}
 ${GLSL_MASK}
@@ -68,6 +71,9 @@ void main() {
       blur      += d.w * w;
     }
   }
+  // The brush joins the masks here, on the finished picture, rather than being
+  // healed into the source where the grade would sharpen its edge again.
+  if (uRetouchBlurOn == 1) blur += texture(uRetouchBlur, clamp(maskUv(vUv), 0.0, 1.0)).r;
 
   if (uDenoiseLuma > 0.0 || uDenoiseChroma > 0.0) {
     // Blend toward the tight blur, splitting luma and chroma so chroma noise

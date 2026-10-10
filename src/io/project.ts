@@ -96,8 +96,11 @@ export async function parseProject(file: File): Promise<{ photo: File; edits: Ed
 
   const edits = parseSidecar(text)
   const photoEnd = bodyStart + header.source.size
-  const bytes = file.slice(bodyStart, photoEnd)
   if (photoEnd > file.size) throw new Error('That project file is incomplete')
+  // Read into memory rather than kept as a slice of the project. A slice reads
+  // the project file lazily, so saving over that file would pull the photo out
+  // from under the open edit and the next save could not read it.
+  const bytes = new Blob([await file.slice(bodyStart, photoEnd).arrayBuffer()])
 
   const subjects: ProjectSubject[] = []
   let at = photoEnd
