@@ -509,6 +509,26 @@ async function restoreSubject(frameId: string, model: string): Promise<SubjectMa
 }
 
 /**
+ * The maps a stack's subject masks were found with, from memory or disk, for
+ * writing into a project file. Only what exists: a mask never detected has
+ * nothing to carry, and saving must not run the detector.
+ */
+export async function foundSubjects(
+  masks: Mask[],
+  frameId: string,
+): Promise<{ model: string; map: SubjectMap }[]> {
+  const out: { model: string; map: SubjectMap }[] = []
+  const seen = new Set<string>()
+  for (const mask of masks) {
+    if (mask.kind !== 'subject' || seen.has(mask.model)) continue
+    seen.add(mask.model)
+    const map = cachedSubject(frameId, mask.model) ?? (await restoreSubject(frameId, mask.model))
+    if (map) out.push({ model: mask.model, map })
+  }
+  return out
+}
+
+/**
  * Bring back every map a stack's subject masks were found with, and say which
  * masks are still uncovered afterwards. This is what opening a photo calls, so
  * a mask found last week draws on the first frame rather than sitting in the

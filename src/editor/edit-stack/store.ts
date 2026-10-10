@@ -4,7 +4,14 @@ import { create } from 'zustand'
 import { cloneEdits, defaultEdits, editsEqual } from './defaults'
 import { emptyHistory, pushHistory, shouldPush, touchHistory, type History } from './history'
 import { countEdits, revealTouched, withHidden, type PanelId } from './summary'
-import { createMask, neutralMaskAdjust, replaceMask, replaceMaskAdjust } from './masks'
+import {
+  createMask,
+  neutralMaskAdjust,
+  removeMaskFrom,
+  replaceMask,
+  replaceMaskAdjust,
+  sanitizeLinks,
+} from './masks'
 import { SUBJECT_EDGE_DEFAULTS } from '../../subject/refine'
 import { rememberKey, resolveLens, shotOf, type ResolvedLens } from '../../lens/resolve'
 import { loadRemembered, rememberLens } from '../../lens/remember'
@@ -12,11 +19,13 @@ import { openingLift } from '../tools/auto'
 import {
   DETECT_VERSION,
   forgetSubjects,
+  foundSubjects,
   isModelCached,
   modelIsWarm,
   onSubjectMapsChanged,
   primeSubjects,
   refineFor,
+  rememberSubject,
   restoreSubjects,
   subjectFor,
   subjectMapsFor,
@@ -44,8 +53,9 @@ import { prepareUpscale, upscaleSignature, type UpscaledView } from '../../upsca
 import type { DecodeStage } from '../../io/decode'
 import { extensionOf, isRawFile } from '../../io/formats'
 import type { OpenedFile } from '../../io/file-system'
-import { isProjectFile, parseProject } from '../../io/project'
-import { DEFAULT_EXPORT, type ExportSettings } from '../../io/export'
+import { isProjectFile, parseProject, projectFile, saveProject } from '../../io/project'
+import { DEFAULT_EXPORT, sidecarFile, saveSidecar, type ExportSettings } from '../../io/export'
+import { writeToHandle } from '../../io/file-system'
 import {
   canBatchExport,
   pickExportDirectory,
@@ -284,6 +294,12 @@ interface EditorState {
   closePhoto: () => void
   /** Record that the open photo's edits have been written to a sidecar. */
   markSidecarSaved: () => void
+  /**
+   * Write the open photo's work to a file. `project` and `json` always ask where
+   * (a download where there is no save dialog); `quick` is ⌘S — it overwrites
+   * the file this photo was last saved to, and otherwise saves a .35mm project.
+   */
+  saveWork: (kind: 'project' | 'json' | 'quick') => Promise<void>
   refreshRecents: () => Promise<void>
   clearRecents: () => Promise<void>
 
@@ -497,7 +513,9 @@ export const useEditor = create<EditorState>((set, get) => ({
         continue
       }
       try {
-        const { photo, edits } = await parseProject(entry.file)
+        const { photo, edits, subjects } = await parseProject(entry.file)
+        // Carried in the file, so the masks draw here without the detector.
+        for (const { model, map } of subjects) rememberSubject(db.fileKey(photo), model, map)
         await db.saveEdits({
           key: db.fileKey(photo),
           meta: {
@@ -514,6 +532,9 @@ export const useEditor = create<EditorState>((set, get) => ({
           updatedAt: Date.now(),
         })
         files.push({ file: photo })
+        // Saving again overwrites the project it was opened from, where the
+        // browser gave a handle to it.
+        if (entry.handle) saveTargets.set(db.fileKey(photo), { kind: 'project', handle: entry.handle })
       } catch (err) {
         get().toast(err instanceof Error ? err.message : 'Could not open that project', 'error')
       }
@@ -894,6 +915,43 @@ export const useEditor = create<EditorState>((set, get) => ({
   cancelBatchExport() {
     batchAbort?.abort()
     set({ batch: { ...get().batch, stage: 'Stopping' } })
+  },
+
+  async saveWork(kind) {
+    const { photo, edits, toast } = get()
+    if (!photo) return
+    const { meta, file, frameId } = photo
+
+    // Nothing is detected to save a project; a mask not found yet carries nothing.
+    const found = await foundSubjects(edits.masks, frameId)
+
+    if (kind === 'quick') {
+      const target = saveTargets.get(frameId)
+      if (target) {
+        const { blob, filename } =
+          target.kind === 'project' ? projectFile(file, edits, meta, found) : sidecarFile(meta, edits)
+        if (await writeToHandle(target.handle, blob)) {
+          get().markSidecarSaved()
+          toast(`Saved ${filename}`)
+          return
+        }
+        // Moved, deleted or refused: ask again rather than fail quietly.
+        saveTargets.delete(frameId)
+      }
+      kind = target?.kind ?? 'project'
+    }
+
+    const options = {
+      onHandle: (handle: FileSystemFileHandle) => saveTargets.set(frameId, { kind, handle }),
+    }
+    const outcome =
+      kind === 'project'
+        ? await saveProject(file, edits, meta, found, options)
+        : await saveSidecar(meta, edits, options)
+    if (outcome === 'cancelled') return
+    get().markSidecarSaved()
+    const what = kind === 'project' ? 'Project' : 'Edit preset'
+    toast(outcome === 'saved' ? `${what} saved` : `${what} downloaded`)
   },
 
   markSidecarSaved() {
@@ -1377,7 +1435,7 @@ export const useEditor = create<EditorState>((set, get) => ({
     const index = edits.masks.findIndex((m) => m.id === id)
     if (index === -1) return
 
-    const remaining = edits.masks.filter((m) => m.id !== id)
+    const remaining = removeMaskFrom(edits.masks, id)
     get().update({ masks: remaining }, `mask-remove-${id}`)
 
     if (activeMaskId !== id) return
@@ -1908,6 +1966,8 @@ async function redevelop(get: Getter, set: Setter): Promise<void> {
  * plain data, and keeping them out of state keeps the store serialisable.
  */
 const openedFiles = new Map<string, OpenedFile>()
+/** Where each photo's work was last saved, for ⌘S to overwrite. */
+const saveTargets = new Map<string, { kind: 'project' | 'json'; handle: FileSystemFileHandle }>()
 
 /**
  * The zoom each photo was left at, by frame id. A view setting rather than an
@@ -2156,7 +2216,7 @@ function migrate(edits: Partial<EditState>): EditState {
     // name one this build no longer has. Point it at what is actually here:
     // the alternative is a mask that never finds anything, because the cache
     // is keyed by a model nothing will ever derive.
-    masks: (edits.masks ?? base.masks).map((mask) => {
+    masks: sanitizeLinks((edits.masks ?? base.masks).map((mask) => {
       // An adjustment added after this record was written is absent rather than
       // zero, and absent is not a number: it would reach the uniform arrays as
       // NaN, and `hasMaskAdjust` would call an untouched mask adjusted.
@@ -2169,7 +2229,7 @@ function migrate(edits: Partial<EditState>): EditState {
         detail: Number.isFinite(filled.detail) ? filled.detail : SUBJECT_EDGE_DEFAULTS.detail,
         shift: Number.isFinite(filled.shift) ? filled.shift : SUBJECT_EDGE_DEFAULTS.shift,
       }
-    }),
+    })),
     dynamicRange: edits.dynamicRange ?? base.dynamicRange,
     raw: { ...base.raw, ...(edits.raw ?? {}) },
     // Anything malformed is dropped rather than repaired: a stroke with no

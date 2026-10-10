@@ -133,10 +133,29 @@ describe('subject masks', () => {
   })
 
   it('switches off a fifth subject mask rather than aiming it at channel zero', () => {
-    const packed = packMasks([subject(), subject(), subject(), subject(), subject()])
+    const packed = packMasks(
+      [subject(), subject(), subject(), subject(), subject()],
+      [true, true, true, true, true],
+    )
     // Four fit in an RGBA texture; the fifth has nowhere to read from.
     expect(packed.shape[3 * 4 + 3]).toBeGreaterThan(0)
     expect(packed.shape[4 * 4 + 3]).toBe(0)
+  })
+
+  it('gives a subject mask with no map no strength, inverted or not', () => {
+    const adjusted = { adjust: { ...neutralMaskAdjust(), exposure: 1 } } as Partial<Mask>
+    const masks = [
+      subject(adjusted),
+      subject({ ...adjusted, invert: true } as Partial<Mask>),
+      subject(adjusted),
+    ]
+    // Only the first has a map. Nothing is known about where the others' subject
+    // is, so reading that as "everywhere" would adjust the whole photo.
+    const packed = packMasks(masks, [true, false])
+    expect(packed.shape[3]).toBeGreaterThan(0)
+    expect(packed.shape[7]).toBe(0)
+    expect(packed.shape[11]).toBe(0)
+    expect(packed.toneA[4]).toBe(0)
   })
 
   it('turns feather into the two ends of the alpha remap', () => {
@@ -155,5 +174,33 @@ describe('subject masks', () => {
   it('still respects enabled and amount', () => {
     const off = packMasks([subject({ enabled: false } as Partial<Mask>)])
     expect(off.shape[3]).toBe(0)
+  })
+})
+
+describe('masks limited to another', () => {
+  const adjusted = (over: Partial<Mask> = {}): Mask =>
+    withAdjust({ ...radial(), ...over } as Mask, { exposure: 1 })
+
+  it('points a limited mask at its parent by index, and leaves the rest unlinked', () => {
+    const parent = adjusted({ id: 'p' })
+    const child = adjusted({ id: 'c', within: 'p' })
+    const packed = packMasks([child, parent])
+    expect(packed.within[0]).toBe(1)
+    expect(packed.within[1]).toBe(-1)
+    expect(packed.within[2]).toBe(-1)
+  })
+
+  it('gives no strength to a mask limited to something missing, or to a mask that is itself limited', () => {
+    const orphan = adjusted({ id: 'o', within: 'gone' })
+    const a = adjusted({ id: 'a', within: 'b' })
+    const b = adjusted({ id: 'b', within: 'c' })
+    const c = adjusted({ id: 'c' })
+    const packed = packMasks([orphan, a, b, c])
+    expect(packed.shape[3]).toBe(0)
+    expect(packed.shape[7]).toBe(0)
+    // b is limited to a top-level mask, so it is fine; it is a that has nothing valid to sit in.
+    expect(packed.shape[11]).toBeGreaterThan(0)
+    expect(packed.shape[15]).toBeGreaterThan(0)
+    expect(packed.within[0]).toBe(-1)
   })
 })

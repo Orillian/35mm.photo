@@ -4,11 +4,14 @@ import {
   defaultGeometry,
   hasMaskDetail,
   hasMaskTone,
+  limitCandidates,
   maskIsActive,
   maskSummary,
   neutralMaskAdjust,
+  removeMaskFrom,
   replaceMask,
   replaceMaskAdjust,
+  sanitizeLinks,
 } from './masks'
 import type { RadialMask } from './types'
 
@@ -100,5 +103,30 @@ describe('replaceMask', () => {
     expect(patched[1].adjust.exposure).toBe(-1)
     expect(patched[1].adjust.shadows).toBe(30)
     expect(b.adjust.exposure).toBe(0)
+  })
+})
+
+describe('limiting a mask to another', () => {
+  const mk = (id: string, within?: string) => ({ ...createMask('radial', 1.5), id, within })
+
+  it('offers only top-level masks other than itself', () => {
+    const list = [mk('a'), mk('b'), mk('c', 'a')]
+    expect(limitCandidates(list, list[1]).map((m) => m.id)).toEqual(['a'])
+  })
+
+  it('offers nothing to a mask that others are limited to', () => {
+    const list = [mk('a'), mk('b', 'a')]
+    expect(limitCandidates(list, list[0])).toEqual([])
+  })
+
+  it('removing a mask frees whatever was limited to it', () => {
+    const next = removeMaskFrom([mk('a'), mk('b', 'a')], 'a')
+    expect(next.map((m) => m.id)).toEqual(['b'])
+    expect('within' in next[0]).toBe(false)
+  })
+
+  it('drops links to nothing, to itself, and past one level', () => {
+    const out = sanitizeLinks([mk('a', 'gone'), mk('b', 'b'), mk('c', 'd'), mk('d', 'e'), mk('e')])
+    expect(out.map((m) => m.within)).toEqual([undefined, undefined, undefined, 'e', undefined])
   })
 })

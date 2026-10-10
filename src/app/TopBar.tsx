@@ -1,18 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import { useEditor } from '../editor/edit-stack/store'
 import { Mark } from './Mark'
-import { saveSidecar } from '../io/export'
-import { saveProject } from '../io/project'
 import { IconGitHub, IconHelp, IconInfo } from './ui/icons'
 import { REPO_URL } from './AboutDialog'
 
 export function TopBar() {
   const photo = useEditor((s) => s.photo)
-  const edits = useEditor((s) => s.edits)
   const setExportOpen = useEditor((s) => s.setExportOpen)
   const closePhoto = useEditor((s) => s.closePhoto)
-  const toast = useEditor((s) => s.toast)
-  const markSidecarSaved = useEditor((s) => s.markSidecarSaved)
+  const saveWork = useEditor((s) => s.saveWork)
   const setAboutOpen = useEditor((s) => s.setAboutOpen)
   const setExifOpen = useEditor((s) => s.setExifOpen)
   const frames = useEditor((s) => s.frames)
@@ -66,26 +62,14 @@ export function TopBar() {
 
   const meta = photo?.meta
 
-  const onSaveProject = async () => {
+  const onSaveProject = () => {
     setSaveOpen(false)
-    if (!meta || !photo) return
-    const outcome = await saveProject(photo.file, edits, meta)
-    if (outcome === 'cancelled') return
-    markSidecarSaved()
-    toast(outcome === 'saved' ? 'Project saved' : 'Project downloaded')
+    void saveWork('project')
   }
 
-  const onSaveEdits = async () => {
+  const onSaveEdits = () => {
     setSaveOpen(false)
-    if (!meta) return
-    const outcome = await saveSidecar(meta, edits)
-    if (outcome === 'cancelled') return
-    markSidecarSaved()
-    toast(
-      outcome === 'saved'
-        ? 'Edit sidecar saved next to your photo'
-        : 'Edit sidecar downloaded',
-    )
+    void saveWork('json')
   }
 
   return (
@@ -161,16 +145,18 @@ export function TopBar() {
               aria-haspopup="menu"
               aria-expanded={saveOpen}
             >
-              Save edits
+              Save
               <span className="save-menu__caret" aria-hidden="true">▾</span>
             </button>
             {saveOpen && (
-              <div className="menu" role="menu">
-                <button className="menu__item" role="menuitem" onClick={() => void onSaveProject()}>
-                  Project (.35mm) — photo and edits
+              <div className="menu menu--wide" role="menu">
+                <button className="menu__item menu__item--described" role="menuitem" onClick={() => void onSaveProject()}>
+                  <span className="menu__title">35mm project <span className="mono">.35mm</span></span>
+                  <span className="menu__hint">Editable project in 35mm’s own format. Reopen it any time to keep editing.</span>
                 </button>
-                <button className="menu__item" role="menuitem" onClick={() => void onSaveEdits()}>
-                  Edits only (.json)
+                <button className="menu__item menu__item--described" role="menuitem" onClick={() => void onSaveEdits()}>
+                  <span className="menu__title">Edit preset <span className="mono">.json</span></span>
+                  <span className="menu__hint">Your edits as a reusable preset, to apply to any photo in 35mm.</span>
                 </button>
               </div>
             )}

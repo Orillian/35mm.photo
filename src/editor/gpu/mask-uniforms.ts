@@ -47,6 +47,8 @@ export interface PackedMasks {
   kind: Int32Array
   geom: Float32Array
   shape: Float32Array
+  /** Index of the mask each one is limited to, or -1. */
+  within: Int32Array
   toneA: Float32Array
   toneB: Float32Array
   wb: Float32Array
@@ -72,7 +74,7 @@ export interface PackedMasks {
  * on a filter. Anything past `MAX_MASKS` is ignored here as well as refused at
  * the door, so a hand-edited sidecar cannot overrun the uniform arrays.
  */
-export function packMasks(masks: Mask[]): PackedMasks {
+export function packMasks(masks: Mask[], subjectReady: boolean[] = []): PackedMasks {
   const used = masks.slice(0, MAX_MASKS)
 
   const packed: PackedMasks = {
@@ -80,6 +82,7 @@ export function packMasks(masks: Mask[]): PackedMasks {
     kind: new Int32Array(MAX_MASKS),
     geom: new Float32Array(MAX_MASKS * 4),
     shape: new Float32Array(MAX_MASKS * 4),
+    within: new Int32Array(MAX_MASKS).fill(-1),
     toneA: new Float32Array(MAX_MASKS * 4),
     toneB: new Float32Array(MAX_MASKS * 4),
     // Neutral everywhere to start: a mask with no warmth of its own must
@@ -98,7 +101,18 @@ export function packMasks(masks: Mask[]): PackedMasks {
     // A subject mask past the fourth has no channel to read, so it is packed
     // as present-but-inert rather than aimed at another mask's coverage.
     const overflow = mask.kind === 'subject' && subjectChannel >= MAX_SUBJECT_MASKS
-    const live = mask.enabled && mask.amount > 0 && !overflow
+    // A subject mask with no map to read has no idea where the subject is, and
+    // reading nothing as "everywhere" — which an inverted one would — applies
+    // the adjustment to the whole photo. Not reachable by any ordinary route,
+    // so if it happens it is a fault upstream, and the safe answer is to do nothing.
+    const unmapped = mask.kind === 'subject' && !subjectReady[subjectChannel]
+    // Limited to a mask that is not there, or to one that is itself limited:
+    // neither is something the editor produces, and guessing at either would
+    // put the adjustment somewhere nobody asked for.
+    const parentIndex = mask.within ? used.findIndex((m) => m.id === mask.within) : -1
+    const badLink = mask.within !== undefined && (parentIndex === -1 || Boolean(used[parentIndex].within))
+    if (parentIndex !== -1 && !badLink) packed.within[i] = parentIndex
+    const live = mask.enabled && mask.amount > 0 && !overflow && !unmapped && !badLink
 
     packed.kind[i] = KIND[mask.kind]
 

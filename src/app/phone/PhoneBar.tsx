@@ -1,7 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
 import { useEditor } from '../../editor/edit-stack/store'
-import { saveSidecar } from '../../io/export'
-import { saveProject } from '../../io/project'
 import { pickFiles } from '../../io/file-system'
 import { IconCross, IconDownload, IconMore, IconRedo, IconUndo } from '../ui/icons'
 import { PhoneLibrary } from './PhoneLibrary'
@@ -18,7 +16,6 @@ import { PhoneLibrary } from './PhoneLibrary'
  */
 export function PhoneBar() {
   const photo = useEditor((s) => s.photo)
-  const edits = useEditor((s) => s.edits)
   const undo = useEditor((s) => s.undo)
   const redo = useEditor((s) => s.redo)
   const canUndo = useEditor((s) => s.canUndo())
@@ -33,8 +30,7 @@ export function PhoneBar() {
   const pasteLook = useEditor((s) => s.pasteLook)
   const hasClipboard = useEditor((s) => s.clipboard !== null)
   const openFiles = useEditor((s) => s.openFiles)
-  const toast = useEditor((s) => s.toast)
-  const markSidecarSaved = useEditor((s) => s.markSidecarSaved)
+  const saveWork = useEditor((s) => s.saveWork)
 
   const [menuOpen, setMenuOpen] = useState(false)
   const [libraryOpen, setLibraryOpen] = useState(false)
@@ -57,22 +53,14 @@ export function PhoneBar() {
     fn()
   }
 
-  const onSaveProject = async () => {
+  const onSaveProject = () => {
     setMenuOpen(false)
-    if (!meta || !photo) return
-    const outcome = await saveProject(photo.file, edits, meta)
-    if (outcome === 'cancelled') return
-    markSidecarSaved()
-    toast(outcome === 'saved' ? 'Project saved' : 'Project downloaded')
+    void saveWork('project')
   }
 
-  const onSaveEdits = async () => {
+  const onSaveEdits = () => {
     setMenuOpen(false)
-    if (!meta) return
-    const outcome = await saveSidecar(meta, edits)
-    if (outcome === 'cancelled') return
-    markSidecarSaved()
-    toast(outcome === 'saved' ? 'Edit sidecar saved next to your photo' : 'Edit sidecar downloaded')
+    void saveWork('json')
   }
 
   return (
@@ -124,11 +112,13 @@ export function PhoneBar() {
             </button>
             {photo && (
               <>
-                <button className="menu__item" onClick={() => void onSaveProject()}>
-                  Save project (.35mm)
+                <button className="menu__item menu__item--described" onClick={() => void onSaveProject()}>
+                  <span className="menu__title">Save as 35mm project <span className="mono">.35mm</span></span>
+                  <span className="menu__hint">Editable project in 35mm’s own format. Reopen it any time to keep editing.</span>
                 </button>
-                <button className="menu__item" onClick={() => void onSaveEdits()}>
-                  Save edits only (.json)
+                <button className="menu__item menu__item--described" onClick={() => void onSaveEdits()}>
+                  <span className="menu__title">Save as edit preset <span className="mono">.json</span></span>
+                  <span className="menu__hint">Your edits as a reusable preset, to apply to any photo in 35mm.</span>
                 </button>
                 <button className="menu__item" onClick={run(() => setExifOpen(true))}>
                   Photo info

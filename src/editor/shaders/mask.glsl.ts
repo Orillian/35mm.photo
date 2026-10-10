@@ -29,6 +29,8 @@ uniform vec4 uMaskGeom[MAX_MASKS];
 
 // angle (radians), feather 0..1, invert 0/1, amount 0..1
 uniform vec4 uMaskShape[MAX_MASKS];
+// Index of the mask this one is limited to, or -1.
+uniform int  uMaskWithin[MAX_MASKS];
 /**
  * Coverage maps for subject masks, four to a texture — one per channel, which
  * is as many as anyone has reason to put on one photograph.
@@ -50,7 +52,7 @@ vec2 maskUv(vec2 uv) {
   return h.xy / h.z;
 }
 
-float maskWeight(int index, vec2 p, vec3 c) {
+float maskOwnWeight(int index, vec2 p, vec3 c) {
   int kind = uMaskKind[index];
   vec4 g = uMaskGeom[index];
   vec4 s = uMaskShape[index];
@@ -104,5 +106,19 @@ float maskWeight(int index, vec2 p, vec3 c) {
 
   if (s.z > 0.5) w = 1.0 - w;
   return clamp(w, 0.0, 1.0) * s.w;
+}
+
+/**
+ * Where a mask acts. One that is limited to another acts only where both do, so
+ * the weights multiply — and the parent's own amount, invert and on/off count,
+ * which is what makes a switched-off parent switch its children off too. The
+ * parent is never itself limited (the editor allows one level), so this is a
+ * single extra lookup, and only for masks that have one.
+ */
+float maskWeight(int index, vec2 p, vec3 c) {
+  float w = maskOwnWeight(index, p, c);
+  int parent = uMaskWithin[index];
+  if (w > 0.0 && parent >= 0) w *= maskOwnWeight(parent, p, c);
+  return w;
 }
 `

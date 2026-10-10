@@ -246,7 +246,11 @@ export async function saveBlob(
   suggestedName: string,
   mimeType: string,
   extension: string,
-  options: { preferShare?: boolean } = {},
+  options: {
+    preferShare?: boolean
+    /** Called with the file the person chose, so a later save can overwrite it. */
+    onHandle?: (handle: FileSystemFileHandle) => void
+  } = {},
 ): Promise<'saved' | 'shared' | 'downloaded' | 'cancelled'> {
   if (typeof window !== 'undefined' && 'showSaveFilePicker' in window) {
     try {
@@ -257,6 +261,7 @@ export async function saveBlob(
       const writable = await handle.createWritable()
       await writable.write(blob)
       await writable.close()
+      options.onHandle?.(handle)
       return 'saved'
     } catch (err) {
       if (isAbort(err)) return 'cancelled'

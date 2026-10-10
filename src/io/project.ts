@@ -1,4 +1,5 @@
 import type { EditState, ImageMeta } from '../editor/edit-stack/types'
+import type { SubjectMap } from '../subject/detect'
 import { parseSidecar, SIDECAR_VERSION } from './export'
 import { saveBlob } from './file-system'
 
@@ -11,8 +12,18 @@ import { saveBlob } from './file-system'
  *   8 bytes   magic
  *   4 bytes   header length, little-endian
  *   n bytes   header, UTF-8 JSON (a sidecar, plus what is needed to rebuild the File)
- *   rest      the original file, byte for byte
+ *   m bytes   the original file, byte for byte
+ *   rest      the subject maps the header lists, back to back
+ *
+ * The maps are what the detector found for each subject mask. They are derived
+ * from the photo and normally live only in the browser's cache, so without them
+ * a project opened anywhere else has masks with nothing to draw.
  */
+
+export interface ProjectSubject {
+  model: string
+  map: SubjectMap
+}
 
 export const PROJECT_EXTENSION = '35mm'
 
@@ -24,13 +35,18 @@ interface ProjectHeader {
   savedAt: string
   source: { name: string; type: string; size: number; lastModified: number }
   edits: EditState
+  subjects?: { model: string; size: number; length: number }[]
 }
 
 export function isProjectFile(name: string): boolean {
   return name.toLowerCase().endsWith(`.${PROJECT_EXTENSION}`)
 }
 
-export function buildProject(source: File, edits: EditState): Blob {
+export function buildProject(
+  source: File,
+  edits: EditState,
+  subjects: ProjectSubject[] = [],
+): Blob {
   const header: ProjectHeader = {
     app: '35mm',
     version: SIDECAR_VERSION,
@@ -42,11 +58,16 @@ export function buildProject(source: File, edits: EditState): Blob {
       lastModified: source.lastModified,
     },
     edits,
+    subjects: subjects.map(({ model, map }) => ({
+      model,
+      size: map.size,
+      length: map.data.byteLength,
+    })),
   }
   const json = new TextEncoder().encode(JSON.stringify(header))
   const length = new Uint8Array(4)
   new DataView(length.buffer).setUint32(0, json.byteLength, true)
-  return new Blob([MAGIC, length, json, source], { type: 'application/octet-stream' })
+  return new Blob([MAGIC, length, json, source, ...subjects.map((s) => new Uint8Array(s.map.data))], { type: 'application/octet-stream' })
 }
 
 /**
@@ -54,7 +75,7 @@ export function buildProject(source: File, edits: EditState): Blob {
  * rebuilt File keeps the original's name and modified time, so it has the same
  * identity as the photo it came from and finds the same cached work.
  */
-export async function parseProject(file: File): Promise<{ photo: File; edits: EditState }> {
+export async function parseProject(file: File): Promise<{ photo: File; edits: EditState; subjects: ProjectSubject[] }> {
   const bad = () => new Error('That is not a 35mm project file')
 
   const prefix = new Uint8Array(await file.slice(0, MAGIC.length + 4).arrayBuffer())
@@ -74,23 +95,46 @@ export async function parseProject(file: File): Promise<{ photo: File; edits: Ed
   if (!header.source?.name) throw bad()
 
   const edits = parseSidecar(text)
-  const bytes = file.slice(bodyStart)
-  if (header.source.size !== bytes.size) throw new Error('That project file is incomplete')
+  const photoEnd = bodyStart + header.source.size
+  const bytes = file.slice(bodyStart, photoEnd)
+  if (photoEnd > file.size) throw new Error('That project file is incomplete')
+
+  const subjects: ProjectSubject[] = []
+  let at = photoEnd
+  for (const entry of header.subjects ?? []) {
+    if (at + entry.length > file.size) throw new Error('That project file is incomplete')
+    const data = new Uint8ClampedArray(await file.slice(at, at + entry.length).arrayBuffer())
+    at += entry.length
+    if (data.length === entry.size * entry.size) {
+      subjects.push({ model: entry.model, map: { data, size: entry.size } })
+    }
+  }
 
   const photo = new File([bytes], header.source.name, {
     type: header.source.type,
     lastModified: header.source.lastModified,
   })
-  return { photo, edits }
+  return { photo, edits, subjects }
 }
 
-export function saveProject(source: File, edits: EditState, meta: Pick<ImageMeta, 'name'>) {
+export function projectFile(
+  source: File,
+  edits: EditState,
+  meta: Pick<ImageMeta, 'name'>,
+  subjects: ProjectSubject[] = [],
+) {
   const dot = meta.name.lastIndexOf('.')
   const stem = dot === -1 ? meta.name : meta.name.slice(0, dot)
-  return saveBlob(
-    buildProject(source, edits),
-    `${stem}.${PROJECT_EXTENSION}`,
-    'application/octet-stream',
-    PROJECT_EXTENSION,
-  )
+  return { blob: buildProject(source, edits, subjects), filename: `${stem}.${PROJECT_EXTENSION}` }
+}
+
+export function saveProject(
+  source: File,
+  edits: EditState,
+  meta: Pick<ImageMeta, 'name'>,
+  subjects: ProjectSubject[],
+  options?: Parameters<typeof saveBlob>[4],
+) {
+  const { blob, filename } = projectFile(source, edits, meta, subjects)
+  return saveBlob(blob, filename, 'application/octet-stream', PROJECT_EXTENSION, options)
 }

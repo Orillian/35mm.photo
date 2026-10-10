@@ -130,6 +130,8 @@ export class Renderer {
   private curveTexture: WebGLTexture
   private lutTexture: WebGLTexture | null = null
   private subjectTexture: WebGLTexture | null = null
+  /** Per subject channel: is there a map in the texture to read? */
+  private subjectReady: boolean[] = []
   /**
    * The source with the retouch strokes healed into it, or null when there are
    * none. A copy rather than an edit of `imageTexture`, because the before view
@@ -371,6 +373,7 @@ export class Renderer {
   setSubjectMaps(maps: ({ data: Uint8ClampedArray; size: number } | null)[]) {
     const gl = this.gl
     const live = maps.slice(0, MAX_SUBJECT_MASKS)
+    this.subjectReady = live.map((m) => m !== null)
     const size = live.find((m) => m)?.size ?? 0
 
     if (!size) {
@@ -620,6 +623,7 @@ export class Renderer {
     u.iv('uMaskKind', packed.kind)
     u.v4v('uMaskGeom', packed.geom)
     u.v4v('uMaskShape', packed.shape)
+    u.iv('uMaskWithin', packed.within)
 
     if (parts.tone) {
       u.v4v('uMaskToneA', packed.toneA)
@@ -921,7 +925,7 @@ export class Renderer {
     overlay: number | null = null,
     layout?: FrameLayout | null,
   ) {
-    const packed = packMasks(edits.masks)
+    const packed = packMasks(edits.masks, this.subjectReady)
     const framed = layout?.framed
       ? layout
       : { photo: { width, height }, width, height, inset: { top: 0, right: 0, bottom: 0, left: 0 }, framed: false }

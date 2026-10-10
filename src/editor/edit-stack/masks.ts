@@ -202,3 +202,45 @@ export const isRadial = (m: Mask): m is RadialMask => m.kind === 'radial'
 export const isLinear = (m: Mask): m is LinearMask => m.kind === 'linear'
 export const isLuminance = (m: Mask): m is LuminanceMask => m.kind === 'luminance'
 export const isColour = (m: Mask): m is ColourMask => m.kind === 'colour'
+
+/* ───────────────────────── limiting one mask to another ───────────────────────── */
+
+/**
+ * The masks `mask` may be limited to: top-level ones, other than itself. A mask
+ * that already has masks limited to it cannot be limited in turn — that would
+ * be a second level, and there is only one.
+ */
+export function limitCandidates(masks: Mask[], mask: Mask): Mask[] {
+  if (masks.some((m) => m.within === mask.id)) return []
+  return masks.filter((m) => m.id !== mask.id && !m.within)
+}
+
+/**
+ * Drop any link that does not name a top-level mask in this list: a hand-edited
+ * sidecar, a pasted look whose parent did not come along, or a chain of two.
+ * Run wherever masks arrive from outside, so the renderer only meets valid ones.
+ */
+export function sanitizeLinks(masks: Mask[]): Mask[] {
+  const topLevel = new Set(masks.filter((m) => !m.within).map((m) => m.id))
+  // Links that point at a top-level mask, so a mask limited to something that is
+  // itself limited loses its link first, and its parent is then free to keep one.
+  const valid = (m: Mask) => m.within !== undefined && m.within !== m.id && topLevel.has(m.within)
+  const parentsInUse = new Set(masks.filter(valid).map((m) => m.within))
+  return masks.map((m) => {
+    if (m.within === undefined) return m
+    if (valid(m) && !parentsInUse.has(m.id)) return m
+    const { within: _dropped, ...rest } = m
+    return rest as Mask
+  })
+}
+
+/** The list without one mask, and without anything that was limited to it. */
+export function removeMaskFrom(masks: Mask[], id: string): Mask[] {
+  return masks
+    .filter((m) => m.id !== id)
+    .map((m) => {
+      if (m.within !== id) return m
+      const { within: _dropped, ...rest } = m
+      return rest as Mask
+    })
+}

@@ -349,12 +349,23 @@ export function buildSidecar(meta: ImageMeta, edits: EditState): Sidecar {
   }
 }
 
-export async function saveSidecar(meta: ImageMeta, edits: EditState) {
+export function sidecarFile(meta: ImageMeta, edits: EditState) {
   const json = JSON.stringify(buildSidecar(meta, edits), null, 2)
-  const blob = new Blob([json], { type: 'application/json' })
   const dot = meta.name.lastIndexOf('.')
   const stem = dot === -1 ? meta.name : meta.name.slice(0, dot)
-  return saveBlob(blob, `${stem}.35mm.json`, 'application/json', 'json')
+  return {
+    blob: new Blob([json], { type: 'application/json' }),
+    filename: `${stem}.35mm.json`,
+  }
+}
+
+export async function saveSidecar(
+  meta: ImageMeta,
+  edits: EditState,
+  options?: Parameters<typeof saveBlob>[4],
+) {
+  const { blob, filename } = sidecarFile(meta, edits)
+  return saveBlob(blob, filename, 'application/json', 'json', options)
 }
 
 /** Sidecars saved before the rename to 35mm are still perfectly good edit state. */

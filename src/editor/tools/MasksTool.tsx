@@ -8,6 +8,7 @@ import {
   isLinear,
   isLuminance,
   isRadial,
+  limitCandidates,
   maskKindHint,
   maskSummary,
   RANGE_MASK_DEFAULTS,
@@ -68,7 +69,10 @@ export function MasksTool() {
                       aria-pressed={m.id === activeMaskId}
                     >
                       <span className="mask-row__name">{m.name}</span>
-                      <span className="mask-row__note">{maskSummary(m)}</span>
+                      <span className="mask-row__note">
+                        {maskSummary(m)}
+                        {m.within && ` · in ${masks.find((p) => p.id === m.within)?.name ?? '?'}`}
+                      </span>
                     </button>
                     <button
                       className="icon-button icon-button--quiet"
@@ -268,6 +272,9 @@ export function MasksTool() {
 /** The controls that belong to the kind of mask this is. */
 function ShapeGroup({ mask }: { mask: Mask }) {
   const updateMask = useEditor((s) => s.updateMask)
+  const masks = useEditor((s) => s.edits.masks)
+  const candidates = limitCandidates(masks, mask)
+  const children = masks.filter((m) => m.within === mask.id)
 
   return (
     <section className="tool__group">
@@ -282,6 +289,32 @@ function ShapeGroup({ mask }: { mask: Mask }) {
           <span>Invert</span>
         </label>
       </header>
+
+      {(candidates.length > 0 || mask.within !== undefined) && (
+        <label className="field field--full">
+          <span className="field__label">Limit to</span>
+          <select
+            className="field__select"
+            value={mask.within ?? ''}
+            onChange={(e) =>
+              updateMask(mask.id, { within: e.target.value || undefined }, `mask-limit-${mask.id}`)
+            }
+          >
+            <option value="">Whole photo</option>
+            {candidates.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+      {children.length > 0 && (
+        <p className="tool__hint tool__hint--inline">
+          {children.map((m) => m.name).join(', ')} {children.length === 1 ? 'acts' : 'act'} only inside
+          this mask.
+        </p>
+      )}
 
       <Slider
         label="Amount"

@@ -257,6 +257,12 @@ interface MaskCommon {
   amount: number
   /** How far the edge fades, 0..100. For a range mask, how soft its ends are. */
   feather: number
+  /**
+   * The mask this one is limited to: it acts only where both cover the picture.
+   * One level only — a mask that others are limited to cannot itself be limited,
+   * which keeps the shader to a single extra lookup per pixel.
+   */
+  within?: string
   adjust: MaskAdjust
 }
 

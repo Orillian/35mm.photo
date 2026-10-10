@@ -15,6 +15,16 @@ export function useKeyboard() {
       // the document, which have no closest(), and the throw would take every
       // shortcut down with it.
       const target = event.target instanceof Element ? event.target : null
+      // Save is claimed before the typing guard below: after touching a slider or
+      // a dropdown the focus is on a form field, and a ⌘S that fell through
+      // there reached the browser's own save-page dialog.
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's') {
+        event.preventDefault()
+        const state = useEditor.getState()
+        if (state.photo) void state.saveWork('quick')
+        return
+      }
+
       // Never steal a key from a field the user is typing in.
       if (target?.closest('input, textarea, select, [contenteditable="true"]')) {
         if (!(event.key === 'Escape')) return
