@@ -62,17 +62,33 @@
 .topbar__wordmark-tld { font-weight: 400; color: var(--accent); }
 
 .topbar__rule { width: 1px; height: 24px; background: var(--line-topbar); }
-.topbar__file { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+/* Centred, not baseline: the name block is one line or two, and the badge, the
+   shot details and the info button must sit at the same height either way. */
+.topbar__file { display: flex; align-items: center; gap: 10px; min-width: 0; }
 
+.topbar__names { display: flex; flex-direction: column; justify-content: center; min-width: 0; line-height: 1.1; }
+/* Small enough that the name and the project file together take no more room
+   than the name alone used to, so adding a project moves nothing beside it. */
 .topbar__name {
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* The project file the photo was opened from or last saved to, under its name. */
+.topbar__project {
+  font-family: var(--mono);
+  font-size: 11px;
+  margin-top: 2px;
+  color: var(--text-dim);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .topbar__meta { font-size: 14px; color: var(--text-dim); white-space: nowrap; }
+.topbar__status-text { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .topbar__idle { font-size: 16px; color: var(--text-muted); line-height: 1.4; }
 .menu--wide .menu__hint { white-space: nowrap; }
 .topbar__spacer { flex: 1; }
@@ -83,6 +99,10 @@
   align-items: center;
   gap: 8px;
   font-size: 14px;
+  /* Shrinkable, and the first thing to give: it repeats the file name the
+     name block already shows, so it clips before that block does. */
+  min-width: 0;
+  flex-shrink: 3;
   color: var(--text-muted);
   white-space: nowrap;
 }
@@ -666,6 +686,8 @@
 /* Wheel zoom replaces scrolling here, so dragging is how you reach the edges. */
 .viewport__stage[data-pannable] { cursor: grab; }
 .viewport__stage[data-panning] { cursor: grabbing; }
+/* A pan in progress is a hand everywhere, over a brush cursor or a crop handle alike. */
+.viewport__stage[data-panning] * { cursor: grabbing !important; }
 /* The crop box and the split handle keep their own cursors while dragging. */
 .viewport__stage[data-pannable] .crop__box,
 .viewport__stage[data-pannable] .crop__handle,

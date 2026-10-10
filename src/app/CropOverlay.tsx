@@ -100,6 +100,7 @@ export function CropOverlay({ width, height }: { width: number; height: number }
   const startHorizon = (event: React.PointerEvent) => {
     const root = rootRef.current
     if (!root) return
+    if (!isPrimary(event)) return
     event.preventDefault()
     event.stopPropagation()
     const origin = root.getBoundingClientRect()
@@ -200,6 +201,7 @@ export function CropOverlay({ width, height }: { width: number; height: number }
 
   /** Inside the frame: the picture slides under it, with the pointer. */
   const onBoxPointerDown = (event: React.PointerEvent) => {
+    if (!isPrimary(event)) return
     if (event.metaKey || event.ctrlKey) {
       startHorizon(event)
       return
@@ -218,6 +220,7 @@ export function CropOverlay({ width, height }: { width: number; height: number }
 
   /** A handle: the frame reshapes, the picture stays put. Modifiers are read live, so ⌥ and ⇧ can be pressed mid-drag. */
   const onHandlePointerDown = (handle: Handle) => (event: React.PointerEvent) => {
+    if (!isPrimary(event)) return
     if (event.metaKey || event.ctrlKey) {
       startHorizon(event)
       return
@@ -248,11 +251,11 @@ export function CropOverlay({ width, height }: { width: number; height: number }
   const onRootPointerDown = (event: React.PointerEvent) => {
     // The box, the handles and the horizon layer take their own pointer.
     if (event.target !== event.currentTarget) return
+    if (!isPrimary(event)) return
     if (event.metaKey || event.ctrlKey) {
       startHorizon(event)
       return
     }
-    if (!isPrimary(event)) return
     const root = rootRef.current
     if (!root) return
     const rect = root.getBoundingClientRect()

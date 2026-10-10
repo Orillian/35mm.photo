@@ -548,6 +548,12 @@ export interface Frame {
    * disk, not about losing work.
    */
   unsaved?: boolean
+  /**
+   * The file ⌘S writes to, by name — a project opened from disk, or whatever
+   * was last saved through the dialog. Absent where the browser gave no handle
+   * (a download), since then there is no file that is "open".
+   */
+  savedAs?: string
   /** Set when the file could not be decoded in this browser. */
   error?: string
 }

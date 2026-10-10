@@ -65,6 +65,8 @@ export function MaskOverlay({ width, height }: { width: number; height: number }
     )
 
   const startDrag = (handle: Handle) => (event: React.PointerEvent) => {
+    // Only the left button drags; anything else is the stage's (the middle one pans).
+    if (event.pointerType === 'mouse' && event.button !== 0) return
     event.preventDefault()
     event.stopPropagation()
 

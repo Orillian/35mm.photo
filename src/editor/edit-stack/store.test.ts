@@ -183,6 +183,12 @@ describe('opening a .35mm project', () => {
     expect(edits.retouch[0].strength).toBe(DEFAULT_STRENGTH)
   })
 
+  it('a project opened without a handle names no file — there is none to write to', async () => {
+    const source = photoFile()
+    await useEditor.getState().openFiles([{ file: projectFile(source, { exposure: 0.5 }) }])
+    expect(useEditor.getState().frames[0].savedAs).toBeUndefined()
+  })
+
   it('refuses something that is not a project, and says so', async () => {
     await useEditor.getState().openFiles([{ file: new File(['nope'], 'broken.35mm') }])
     expect(useEditor.getState().frames).toEqual([])
@@ -207,6 +213,8 @@ describe('saving', () => {
     expect(back.photo.name).toBe(source.name)
     expect(back.edits.exposure).toBe(0.25)
     expect(useEditor.getState().frames[0].unsaved).toBe(false)
+    // The top bar names the file ⌘S now writes to.
+    expect(useEditor.getState().frames[0].savedAs).toBe(source.name.replace('.jpg', '.35mm'))
   })
 
   it('⌘S after that overwrites the same file without asking', async () => {
@@ -230,6 +238,8 @@ describe('saving', () => {
     shared.writeOk.value = false
     await useEditor.getState().saveWork('quick')
     expect(saveBlob).toHaveBeenCalledTimes(2)
+    // The dialog's new file is the one named, not the one that could not be written.
+    expect(useEditor.getState().frames[0].savedAs).toMatch(/\.35mm$/)
   })
 
   it('follows the format last chosen: a JSON save makes ⌘S rewrite the JSON', async () => {
@@ -237,6 +247,7 @@ describe('saving', () => {
     await useEditor.getState().saveWork('json')
     expect(shared.saves[0].name).toMatch(/\.35mm\.json$/)
     expect(shared.saves[0].mime).toBe('application/json')
+    expect(useEditor.getState().frames[0].savedAs).toMatch(/\.35mm\.json$/)
 
     await useEditor.getState().saveWork('quick')
     const [, blob] = vi.mocked(writeToHandle).mock.calls[0]
@@ -252,6 +263,7 @@ describe('saving', () => {
 
     expect(saveBlob).not.toHaveBeenCalled()
     expect(vi.mocked(writeToHandle).mock.calls[0][0]).toBe(handle)
+    expect(useEditor.getState().frames[0].savedAs).toBe('opened.35mm')
   })
 
   it('the explicit menu choices always ask where', async () => {

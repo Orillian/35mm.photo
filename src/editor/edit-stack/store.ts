@@ -507,6 +507,7 @@ export const useEditor = create<EditorState>((set, get) => ({
     // A .35mm project holds a photo and the edits made to it. Unpack it into
     // the photo, filing the edits where an ordinary open will find them.
     const files: OpenedFile[] = []
+    const savedAs = new Map<string, string | undefined>()
     for (const entry of incoming) {
       if (!isProjectFile(entry.file.name)) {
         files.push(entry)
@@ -535,6 +536,7 @@ export const useEditor = create<EditorState>((set, get) => ({
         // Saving again overwrites the project it was opened from, where the
         // browser gave a handle to it.
         if (entry.handle) saveTargets.set(db.fileKey(photo), { kind: 'project', handle: entry.handle })
+        savedAs.set(db.fileKey(photo), entry.handle?.name)
       } catch (err) {
         get().toast(err instanceof Error ? err.message : 'Could not open that project', 'error')
       }
@@ -565,6 +567,7 @@ export const useEditor = create<EditorState>((set, get) => ({
         orientation: 1,
         bytes: f.file.size,
       },
+      savedAs: savedAs.get(db.fileKey(f.file)),
     }))
 
     // Re-dropping a photo should select it, not duplicate the filmstrip entry.
@@ -572,6 +575,7 @@ export const useEditor = create<EditorState>((set, get) => ({
     for (const [i, frame] of added.entries()) {
       const at = merged.findIndex((f) => f.id === frame.id)
       if (at === -1) merged.push(frame)
+      else if (frame.savedAs) merged[at] = { ...merged[at], savedAs: frame.savedAs }
       openedFiles.set(frame.id, files[i])
     }
 
@@ -953,12 +957,16 @@ export const useEditor = create<EditorState>((set, get) => ({
         }
         // Moved, deleted or refused: ask again rather than fail quietly.
         saveTargets.delete(frameId)
+        setSavedAs(frameId, undefined, set, get)
       }
       kind = target?.kind ?? 'project'
     }
 
     const options = {
-      onHandle: (handle: FileSystemFileHandle) => saveTargets.set(frameId, { kind, handle }),
+      onHandle: (handle: FileSystemFileHandle) => {
+        saveTargets.set(frameId, { kind, handle })
+        setSavedAs(frameId, handle.name, set, get)
+      },
     }
     const outcome =
       kind === 'project'
@@ -2000,6 +2008,11 @@ async function redevelop(get: Getter, set: Setter): Promise<void> {
  * plain data, and keeping them out of state keeps the store serialisable.
  */
 const openedFiles = new Map<string, OpenedFile>()
+/** The file a frame's ⌘S writes to, as the top bar shows it. */
+function setSavedAs(frameId: string, name: string | undefined, set: Setter, get: Getter) {
+  set({ frames: get().frames.map((f) => (f.id === frameId ? { ...f, savedAs: name } : f)) })
+}
+
 /** Where each photo's work was last saved, for ⌘S to overwrite. */
 const saveTargets = new Map<string, { kind: 'project' | 'json'; handle: FileSystemFileHandle }>()
 

@@ -159,6 +159,7 @@ export function RetouchOverlay({
 
   /** Drag where a heal copies from. */
   const onSourceDown = (stroke: RetouchStroke) => (event: React.PointerEvent) => {
+    if (event.pointerType === 'mouse' && event.button !== 0) return
     event.preventDefault()
     event.stopPropagation()
     const el = event.currentTarget as unknown as SVGGraphicsElement

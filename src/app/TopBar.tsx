@@ -61,6 +61,8 @@ export function TopBar() {
   }, [menuOpen])
 
   const meta = photo?.meta
+  // The file ⌘S writes to, when there is one: a project opened or saved through the dialog.
+  const savedAs = frames.find((f) => f.id === photo?.frameId)?.savedAs
 
   const onSaveProject = () => {
     setSaveOpen(false)
@@ -84,7 +86,16 @@ export function TopBar() {
 
       {meta ? (
         <div className="topbar__file">
-          <span className="topbar__name">{meta.name}</span>
+          {/* The photo's own name, and under it the project file it lives in,
+              when there is one — two different files, so two lines. */}
+          <span className="topbar__names">
+            <span className="topbar__name" title={meta.name}>{meta.name}</span>
+            {savedAs && (
+              <span className="topbar__project" title={`${savedAs} — the file ⌘S writes to`}>
+                {savedAs}
+              </span>
+            )}
+          </span>
           {meta.isRaw && <span className="badge">RAW</span>}
           <span className="topbar__meta">{describe(meta)}</span>
           <button
@@ -107,7 +118,10 @@ export function TopBar() {
 
       <div className="topbar__status">
         <span className="dot" />
-        <span>{meta ? 'Edits saved locally · non-destructive' : 'Works offline · nothing to install'}</span>
+        <span className="topbar__status-text">
+          {meta ? 'Edits saved locally · non-destructive' : 'Works offline · nothing to install'}
+          {savedAs && <> · {savedAs}</>}
+        </span>
       </div>
 
       {/* Always present, with or without a photo: the way out to the source and
