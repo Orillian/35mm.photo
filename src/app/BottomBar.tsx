@@ -1,6 +1,6 @@
 import { useEditor, useRenderEdits } from '../editor/edit-stack/store'
 import { exportLayoutFor } from '../io/export'
-import { IconCamera, IconGrid, IconLens, IconMinus, IconPlus, IconSplit } from './ui/icons'
+import { IconCamera, IconLens, IconMinus, IconPlus, IconSplit } from './ui/icons'
 import { GRID_DENSITIES } from '../editor/edit-stack/grid'
 
 const ZOOM_STEPS = [0.25, 0.33, 0.5, 0.66, 1, 1.5, 2, 3, 4]
@@ -56,12 +56,11 @@ export function BottomBar({ scale, fitScale }: { scale: number; fitScale: number
         <span>Split view</span>
       </button>
 
-      {/* One control: None, or how many cells across. The icon is its label. */}
+      {/* One control, and its own label: "Grid · none" or how many cells across. */}
       <label
         className="bottombar__grid"
         title={cropping ? 'The crop has guides of its own' : 'Grid over the picture'}
       >
-        <IconGrid />
         <select
           className="field__select field__select--sm"
           value={grid.on ? grid.density : 0}
@@ -72,7 +71,7 @@ export function BottomBar({ scale, fitScale }: { scale: number; fitScale: number
             setGrid(density > 0 ? { on: true, density } : { on: false })
           }}
         >
-          <option value={0}>No grid</option>
+          <option value={0}>Grid · none</option>
           {GRID_DENSITIES.map((d) => (
             <option key={d} value={d}>
               Grid · {d} across

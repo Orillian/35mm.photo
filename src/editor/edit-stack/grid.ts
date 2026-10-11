@@ -1,12 +1,12 @@
 /**
- * The grid overlay: a lattice of square cells over the picture, for lining
- * things up. A viewing aid, not an edit — it reaches no export and lives with
+ * The grid overlay: a lattice of near-square cells over the picture that
+ * always ends on its edges, for lining things up. A viewing aid, not an edit — it reaches no export and lives with
  * the other viewport preferences in localStorage, like the crop guide.
  */
 
 export interface GridSettings {
   on: boolean
-  /** Cells across the picture's width. Cells are square, so the rows follow. */
+  /** Cells across the picture's width; the rows follow its shape, nearest to square. */
   density: number
 }
 
@@ -15,18 +15,20 @@ export const GRID_DENSITIES = [2, 3, 4, 6, 8, 12] as const
 export const DEFAULT_GRID: GridSettings = { on: false, density: 4 }
 
 /**
- * Where the lines fall, in pixels of a `width` × `height` picture. Square
- * cells, `density` of them across; down the side as many as fit, so the last
- * row may be cut short rather than the cells being stretched to fit.
+ * Where the lines fall, in pixels of a `width` × `height` picture: `density`
+ * cells across, and down the side as many as keeps the cells nearest to
+ * square. The cells stretch a little to fit rather than the last row being
+ * cut short — a grid that ends on the picture's edges on every photo, whatever
+ * its shape, is what makes it usable for lining things up.
  */
 export function gridLines(density: number, width: number, height: number): { xs: number[]; ys: number[] } {
   const n = Math.max(1, Math.round(density))
   if (!(width > 0) || !(height > 0)) return { xs: [], ys: [] }
-  const cell = width / n
+  const rows = Math.max(1, Math.round(n * (height / width)))
   const xs: number[] = []
-  for (let i = 1; i < n; i++) xs.push(i * cell)
+  for (let i = 1; i < n; i++) xs.push((i * width) / n)
   const ys: number[] = []
-  for (let y = cell; y < height - 0.5; y += cell) ys.push(y)
+  for (let j = 1; j < rows; j++) ys.push((j * height) / rows)
   return { xs, ys }
 }
 

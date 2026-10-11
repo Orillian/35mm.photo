@@ -354,13 +354,6 @@ export const IconPaste = ({ size = 16 }: Props) => (
   </svg>
 )
 
-export const IconGrid = ({ size = 16 }: Props) => (
-  <svg {...base(size)}>
-    <rect x="2" y="2" width="12" height="12" rx="1.5" />
-    <path d="M6 2v12M10 2v12M2 6h12M2 10h12" />
-  </svg>
-)
-
 export const IconSplit = ({ size = 16 }: Props) => (
   <svg {...base(size)}>
     <rect x="1.8" y="3" width="12.4" height="10" rx="1.6" />
