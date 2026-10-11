@@ -1,3 +1,4 @@
+import { snapLinearEnd } from '../editor/edit-stack/mask-drag'
 import { useMemo, useRef } from 'react'
 import { useEditor, useRenderEdits } from '../editor/edit-stack/store'
 import { applyMat3Point, buildUprightTransform, mat3Invert } from '../editor/gpu/transform'
@@ -97,7 +98,7 @@ export function MaskOverlay({ width, height }: { width: number; height: number }
       const drag = dragRef.current
       if (!drag) return
       const to = pointerToUpright(e, rectNow())
-      const patch = resolve(drag.handle, drag.mask, drag.from, to, aspect)
+      const patch = resolve(drag.handle, drag.mask, drag.from, to, aspect, { snap: e.shiftKey })
       if (patch) updateMask(drag.mask.id, patch, `mask-drag-${drag.mask.id}`)
     }
     // A touch can end with `pointercancel` or a lost capture rather than
@@ -259,6 +260,7 @@ function resolve(
   from: [number, number],
   to: [number, number],
   aspect: number,
+  options: { snap?: boolean } = {},
 ): Partial<Mask> | null {
   const dx = to[0] - from[0]
   const dy = to[1] - from[1]
@@ -293,8 +295,18 @@ function resolve(
         y2: clampPos(mask.y2 + dy),
       }
     }
-    if (handle === 'from') return { x1: clampPos(mask.x1 + dx), y1: clampPos(mask.y1 + dy) }
-    if (handle === 'to') return { x2: clampPos(mask.x2 + dx), y2: clampPos(mask.y2 + dy) }
+    // Shift held: the end being dragged snaps so the line runs at a fixed
+    // angle from the other end — level, upright, diagonal and the steps between.
+    if (handle === 'from') {
+      let end: [number, number] = [mask.x1 + dx, mask.y1 + dy]
+      if (options.snap) end = snapLinearEnd([mask.x2, mask.y2], end, aspect)
+      return { x1: clampPos(end[0]), y1: clampPos(end[1]) }
+    }
+    if (handle === 'to') {
+      let end: [number, number] = [mask.x2 + dx, mask.y2 + dy]
+      if (options.snap) end = snapLinearEnd([mask.x1, mask.y1], end, aspect)
+      return { x2: clampPos(end[0]), y2: clampPos(end[1]) }
+    }
   }
 
   return null

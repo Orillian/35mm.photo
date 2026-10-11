@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { blurCoverage } from './coverage'
+import { blurCoverage, withLiveStroke } from './coverage'
 import type { RetouchStroke } from '../editor/edit-stack/types'
 
 const stroke = (over: Partial<RetouchStroke> = {}): RetouchStroke => ({
@@ -59,5 +59,29 @@ describe('blurCoverage', () => {
     const { strength: _none, ...bare } = stroke()
     const map = blurCoverage([bare as RetouchStroke], 1, 200)!
     expect(at(map, 0.5, 0.5)).toBe(byte(0.5))
+  })
+})
+
+describe('withLiveStroke', () => {
+  const live = { points: [0.2, 0.2], size: 0.05, feather: 0, strength: 80 }
+
+  it('lays the stroke being drawn over the committed map without touching it', () => {
+    const base = blurCoverage([stroke({ strength: 60 })], 1, 200)!
+    const before = base.data.slice()
+    const map = withLiveStroke(base, live, 1, 200)!
+    expect(at(map, 0.2, 0.2)).toBe(byte(0.8))
+    expect(at(map, 0.5, 0.5)).toBe(byte(0.6))
+    expect(Array.from(base.data)).toEqual(Array.from(before))
+  })
+
+  it('starts a map from nothing when no stroke is committed yet', () => {
+    const map = withLiveStroke(null, live, 2, 200)!
+    expect(map).toMatchObject({ width: 200, height: 100 })
+    expect(at(map, 0.2, 0.2)).toBe(byte(0.8))
+  })
+
+  it('is still nothing for a dab that paints nothing', () => {
+    expect(withLiveStroke(null, { ...live, strength: 0 }, 1, 200)).toBeNull()
+    expect(withLiveStroke(null, { ...live, points: [] }, 1, 200)).toBeNull()
   })
 })

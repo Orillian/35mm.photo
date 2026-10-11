@@ -145,6 +145,8 @@ export class Renderer {
   /** The blur brush's coverage, and the map it was uploaded from, so a redraw skips the upload. */
   private retouchBlurTexture: WebGLTexture | null = null
   private retouchBlurMap: BlurMap | null = null
+  /** True while the before side of a split is being drawn, which shows no retouch at all. */
+  private renderingBefore = false
   /** What `retouchTexture` currently holds, so a redraw does not re-upload it. */
   private retouchKey = ''
   private retouchSize = { w: 0, h: 0 }
@@ -731,9 +733,10 @@ export class Renderer {
     const needsMid = edits.texture !== 0 || masked.mid
     const needsTight =
       edits.sharpen > 0 || edits.denoiseLuma > 0 || edits.denoiseChroma > 0 || masked.tight
-    // The blur brush wants the defocused copies too. Gated on the strokes, not
-    // the map alone: the before view hands in no strokes and must show none.
-    const brushBlur = this.retouchBlurMap !== null && edits.retouch.some((s) => s.enabled && s.mode === 'blur')
+    // The blur brush wants the defocused copies too. The map is the gate — it
+    // holds only enabled strokes, and the one still being painted, which is not
+    // in `edits` yet — except on the before side, which shows no retouch.
+    const brushBlur = this.retouchBlurMap !== null && !this.renderingBefore
     const needsSoft = masked.soft || brushBlur
     if (!needsWide && !needsMid && !needsTight && !needsTone && !needsSoft) return source
 
@@ -1021,7 +1024,12 @@ export class Renderer {
     const original = originalEdits(edits)
 
     if (beforeOnly) {
-      this.runChain(width, height, original, null, null, undefined, null, frame)
+      this.renderingBefore = true
+      try {
+        this.runChain(width, height, original, null, null, undefined, null, frame)
+      } finally {
+        this.renderingBefore = false
+      }
       return
     }
 
@@ -1043,10 +1051,15 @@ export class Renderer {
       const photoLeft = inner ? inner.inset.left : 0
       const photoWidth = inner ? inner.photo.width : width
       const cut = photoLeft + Math.round(photoWidth * Math.min(splitAt, 1))
-      this.runChain(
-        width, height, original, null, null,
-        { x: 0, y: 0, width: cut, height }, null, frame,
-      )
+      this.renderingBefore = true
+      try {
+        this.runChain(
+          width, height, original, null, null,
+          { x: 0, y: 0, width: cut, height }, null, frame,
+        )
+      } finally {
+        this.renderingBefore = false
+      }
     }
   }
 

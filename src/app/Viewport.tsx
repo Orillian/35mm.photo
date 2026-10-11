@@ -16,7 +16,8 @@ import { MaskOverlay } from './MaskOverlay'
 import { RetouchOverlay } from './RetouchOverlay'
 import { UpscaleBanner } from './UpscaleBanner'
 import { onFillFallback, retouchPatches } from '../retouch/retouch'
-import { blurCoverage } from '../retouch/coverage'
+import { blurCoverage, withLiveStroke } from '../retouch/coverage'
+import { GridOverlay } from './GridOverlay'
 import { isMiddleButton, stageGesture } from './stage-gesture'
 
 /** Histogram readback size — enough bins to be representative, cheap to read. */
@@ -331,10 +332,20 @@ export function Viewport() {
 
   // The blur brush, rasterised for the detail pass. Only the strokes decide it,
   // so a slider elsewhere never redraws the map.
-  const blurMap = useMemo(
+  const committedBlur = useMemo(
     () => (photo ? blurCoverage(renderEdits.retouch, photo.meta.width / photo.meta.height) : null),
     [photo, renderEdits.retouch],
   )
+  // With the stroke being painted laid over it, so a blur shows under the brush.
+  const retouchLive = useEditor((s) => s.retouchLive)
+  const blurMap = useMemo(
+    () =>
+      photo && retouchLive
+        ? withLiveStroke(committedBlur, retouchLive, photo.meta.width / photo.meta.height)
+        : committedBlur,
+    [committedBlur, retouchLive, photo],
+  )
+  const grid = useEditor((s) => s.grid)
 
   useEffect(() => {
     onFillFallback(() => toast('Smart fill could not run, so that spot was healed instead', 'error'))
@@ -1105,6 +1116,17 @@ export function Viewport() {
           }}
         >
           <canvas ref={canvasRef} className="viewport__canvas" />
+
+          {/* Over the picture, not the mat; off while cropping, which has guides of its own. */}
+          {grid.on && !cropping && photo && (
+            <GridOverlay
+              width={cssPhotoWidth}
+              height={cssPhotoHeight}
+              left={cssFrame.inset.left}
+              top={cssFrame.inset.top}
+              density={grid.density}
+            />
+          )}
 
           {splitCompare && !cropping && (
             <>

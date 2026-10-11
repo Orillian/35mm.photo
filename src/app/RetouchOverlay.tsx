@@ -41,6 +41,7 @@ export function RetouchOverlay({
   const addStroke = useEditor((s) => s.addRetouchStroke)
   const updateStroke = useEditor((s) => s.updateRetouchStroke)
   const selectStroke = useEditor((s) => s.selectRetouchStroke)
+  const setRetouchLive = useEditor((s) => s.setRetouchLive)
 
   const meta = photo?.meta
   const picture = useMemo<Picture | null>(() => {
@@ -122,6 +123,38 @@ export function RetouchOverlay({
     liveRef.current = [start]
     setLive([start])
 
+    /*
+     * A blur shows as it is painted. It is only coverage for the detail pass,
+     * so the viewport can draw the stroke so far on every frame; a heal has to
+     * wait for the pointer to lift, because where it copies from depends on
+     * the finished stroke. Published once a frame, not once a move: a mouse
+     * reports far more often than the screen can show.
+     */
+    const publish =
+      brush.mode === 'blur'
+        ? (points: Point[]) =>
+            setRetouchLive({
+              points: points.flat(),
+              size: brush.size,
+              feather: brush.feather,
+              strength: brush.strength,
+            })
+        : null
+    let frame: number | null = null
+    const publishSoon = () => {
+      if (!publish || frame !== null) return
+      frame = requestAnimationFrame(() => {
+        frame = null
+        if (liveRef.current) publish(liveRef.current)
+      })
+    }
+    const unpublish = () => {
+      if (frame !== null) cancelAnimationFrame(frame)
+      frame = null
+      if (publish) setRetouchLive(null)
+    }
+    publish?.([start])
+
     const move = (e: PointerEvent) => {
       const points = liveRef.current
       if (!points) return
@@ -132,6 +165,7 @@ export function RetouchOverlay({
       if (Math.hypot((next[0] - last[0]) / rx, (next[1] - last[1]) / ry) < POINT_SPACING) return
       liveRef.current = [...points, next]
       setLive(liveRef.current)
+      publishSoon()
     }
     const up = () => {
       window.removeEventListener('pointermove', move)
@@ -140,11 +174,17 @@ export function RetouchOverlay({
       el.removeEventListener('lostpointercapture', up)
       const points = liveRef.current
       liveRef.current = null
-      if (!points) return
-      // The drawn stroke stays on screen until its committed twin replaces it.
-      void addStroke({ points: points.flat(), size: brush.size, feather: brush.feather }).finally(() =>
-        setLive(null),
-      )
+      if (!points) {
+        unpublish()
+        return
+      }
+      // The drawn stroke stays on screen until its committed twin replaces it
+      // — the live blur too, so the hand-over is one frame with both, not one
+      // frame with neither.
+      void addStroke({ points: points.flat(), size: brush.size, feather: brush.feather }).finally(() => {
+        setLive(null)
+        unpublish()
+      })
     }
     const cancel = () => {
       liveRef.current = null

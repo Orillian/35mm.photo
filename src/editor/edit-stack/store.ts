@@ -54,6 +54,8 @@ import type { DecodeStage } from '../../io/decode'
 import { extensionOf, isRawFile } from '../../io/formats'
 import type { OpenedFile } from '../../io/file-system'
 import { isProjectFile, parseProject, projectFile, saveProject } from '../../io/project'
+import type { LiveStroke } from '../../retouch/coverage'
+import { loadGrid, saveGrid, type GridSettings } from './grid'
 import { DEFAULT_EXPORT, sidecarFile, saveSidecar, type ExportSettings } from '../../io/export'
 import { writeToHandle } from '../../io/file-system'
 import {
@@ -216,6 +218,14 @@ interface EditorState {
   /** The retouch stroke the tool is editing. UI state, like `activeMaskId`. */
   activeRetouchId: string | null
   /**
+   * The blur stroke under the pointer right now, shown live while it is drawn.
+   * Not an edit: it never reaches the history, a sidecar or an export, and it
+   * is gone the moment the pointer lifts and the real stroke takes its place.
+   */
+  retouchLive: LiveStroke | null
+  /** The grid overlay — a viewing aid, remembered across sessions. */
+  grid: GridSettings
+  /**
    * The brush the next stroke is drawn with. Size is a share of the picture's
    * shorter edge, as a stroke stores it, so the brush covers the same part of
    * any photograph whatever its resolution.
@@ -357,6 +367,8 @@ interface EditorState {
   removeRetouchStroke: (id: string) => void
   selectRetouchStroke: (id: string | null) => void
   setRetouchBrush: (patch: Partial<EditorState['retouchBrush']>) => void
+  setRetouchLive: (live: LiveStroke | null) => void
+  setGrid: (patch: Partial<GridSettings>) => void
   setSmartFill: (on: boolean) => void
   /** Download the fill model, once; after that it is kept. */
   loadFillModel: () => Promise<void>
@@ -470,6 +482,8 @@ export const useEditor = create<EditorState>((set, get) => ({
   sheetDragging: false,
   maskOverlay: true,
   activeRetouchId: null,
+  retouchLive: null,
+  grid: loadGrid(),
   retouchBrush: { size: DEFAULT_BRUSH_SIZE, feather: 50, mode: 'heal', strength: DEFAULT_STRENGTH },
   smartFill: loadSmartFill(),
   retouchPlanning: false,
@@ -1573,6 +1587,16 @@ export const useEditor = create<EditorState>((set, get) => ({
 
   setRetouchBrush(patch) {
     set({ retouchBrush: { ...get().retouchBrush, ...patch } })
+  },
+
+  setRetouchLive(live) {
+    set({ retouchLive: live })
+  },
+
+  setGrid(patch) {
+    const grid = { ...get().grid, ...patch }
+    set({ grid })
+    saveGrid(grid)
   },
 
   setSmartFill(on) {

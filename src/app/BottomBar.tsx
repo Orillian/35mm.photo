@@ -1,6 +1,7 @@
 import { useEditor, useRenderEdits } from '../editor/edit-stack/store'
 import { exportLayoutFor } from '../io/export'
-import { IconCamera, IconLens, IconMinus, IconPlus, IconSplit } from './ui/icons'
+import { IconCamera, IconGrid, IconLens, IconMinus, IconPlus, IconSplit } from './ui/icons'
+import { GRID_DENSITIES } from '../editor/edit-stack/grid'
 
 const ZOOM_STEPS = [0.25, 0.33, 0.5, 0.66, 1, 1.5, 2, 3, 4]
 
@@ -11,6 +12,8 @@ export function BottomBar({ scale, fitScale }: { scale: number; fitScale: number
   const splitCompare = useEditor((s) => s.splitCompare)
   const setSplit = useEditor((s) => s.setSplit)
   const cropping = useEditor((s) => s.cropping)
+  const grid = useEditor((s) => s.grid)
+  const setGrid = useEditor((s) => s.setGrid)
   const photo = useEditor((s) => s.photo)
   const edits = useRenderEdits()
   const setExifOpen = useEditor((s) => s.setExifOpen)
@@ -52,6 +55,31 @@ export function BottomBar({ scale, fitScale }: { scale: number; fitScale: number
         <IconSplit />
         <span>Split view</span>
       </button>
+
+      {/* One control: None, or how many cells across. The icon is its label. */}
+      <label
+        className="bottombar__grid"
+        title={cropping ? 'The crop has guides of its own' : 'Grid over the picture'}
+      >
+        <IconGrid />
+        <select
+          className="field__select field__select--sm"
+          value={grid.on ? grid.density : 0}
+          disabled={!photo || cropping}
+          aria-label="Grid"
+          onChange={(e) => {
+            const density = Number(e.target.value)
+            setGrid(density > 0 ? { on: true, density } : { on: false })
+          }}
+        >
+          <option value={0}>No grid</option>
+          {GRID_DENSITIES.map((d) => (
+            <option key={d} value={d}>
+              Grid · {d} across
+            </option>
+          ))}
+        </select>
+      </label>
 
       {/* What the photo was shot with, beside the photo rather than a dialog
           away. The whole thing is the handle for the rest of the metadata. */}

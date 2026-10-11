@@ -972,6 +972,18 @@
 .bottombar__spacer { flex: 1; }
 
 .zoom { display: flex; align-items: center; gap: 8px; }
+.bottombar__grid { display: flex; align-items: center; gap: 7px; color: var(--text-muted); }
+.bottombar__grid:has(select:disabled) { opacity: 0.5; }
+.field__select--sm { padding: 4px 7px; font-size: 12px; }
+
+/* The grid: over the picture, under every tool, taking no pointer. */
+.grid-overlay { position: absolute; z-index: 1; pointer-events: none; overflow: visible; }
+.grid-overlay__line {
+  stroke: rgba(242, 234, 220, 0.42);
+  stroke-width: 1;
+  /* Readable over a blown sky and over a shadow alike. */
+  filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.7));
+}
 /* Sits between the shot info and the zoom controls, which is where the eye
    already goes when it wants to know what it is about to export. */
 .bottombar__size {

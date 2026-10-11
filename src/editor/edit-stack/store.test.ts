@@ -298,6 +298,28 @@ describe('retouch strokes', () => {
   })
 })
 
+describe('the stroke being painted', () => {
+  it('is held apart from the edits and cleared when the pointer lifts', async () => {
+    await useEditor.getState().openFiles([{ file: photoFile() }])
+    const live = { points: [0.5, 0.5], size: 0.02, feather: 50, strength: 70 }
+    useEditor.getState().setRetouchLive(live)
+    expect(useEditor.getState().retouchLive).toBe(live)
+    expect(useEditor.getState().edits.retouch).toEqual([])
+    expect(useEditor.getState().history.past?.length ?? 0).toBe(0)
+    useEditor.getState().setRetouchLive(null)
+    expect(useEditor.getState().retouchLive).toBeNull()
+  })
+})
+
+describe('the grid', () => {
+  it('merges a change into what was there', () => {
+    useEditor.getState().setGrid({ on: true })
+    expect(useEditor.getState().grid).toMatchObject({ on: true })
+    useEditor.getState().setGrid({ density: 8 })
+    expect(useEditor.getState().grid).toEqual({ on: true, density: 8 })
+  })
+})
+
 describe('masks limited to another', () => {
   it('removing the parent frees the child', async () => {
     await useEditor.getState().openFiles([{ file: photoFile() }])
