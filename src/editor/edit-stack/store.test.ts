@@ -320,6 +320,47 @@ describe('the grid', () => {
   })
 })
 
+describe('undoing an upscale', () => {
+  const fakeView = () => ({
+    source: { width: 80, height: 60, close() {} },
+    preview: { width: 80, height: 60, close() {} },
+    region: null,
+    factor: 2,
+    sig: 'x2',
+    from: { width: 40, height: 30 },
+  })
+  const settle = () => new Promise((r) => setTimeout(r, 10))
+
+  it('takes the upscaled view down with the edit, so the picture is drawn at its own size', async () => {
+    await useEditor.getState().openFiles([{ file: photoFile() }])
+    useEditor.getState().update({ upscale: 2 }, 'upscale')
+    await settle()
+    // Stand in for the model's result: the view the viewport would be drawing.
+    const photo = useEditor.getState().photo!
+    useEditor.setState({ photo: { ...photo, upscaled: fakeView() as never } })
+
+    useEditor.getState().undo()
+    expect(useEditor.getState().edits.upscale).toBe(1)
+    await settle()
+    expect(useEditor.getState().photo?.upscaled).toBeNull()
+  })
+
+  it('and redo asks for it again', async () => {
+    await useEditor.getState().openFiles([{ file: photoFile() }])
+    useEditor.getState().update({ upscale: 2 }, 'upscale')
+    await settle()
+    useEditor.getState().undo()
+    await settle()
+    const { refreshUpscale } = useEditor.getState()
+    const spy = vi.fn(refreshUpscale)
+    useEditor.setState({ refreshUpscale: spy })
+    useEditor.getState().redo()
+    expect(useEditor.getState().edits.upscale).toBe(2)
+    await settle()
+    expect(spy).toHaveBeenCalled()
+  })
+})
+
 describe('masks limited to another', () => {
   it('removing the parent frees the child', async () => {
     await useEditor.getState().openFiles([{ file: photoFile() }])

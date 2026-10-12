@@ -1658,6 +1658,9 @@ export const useEditor = create<EditorState>((set, get) => ({
     })
     maybeRedevelop(before, get, set)
     maybeReresolveLens(edits, get)
+    // The upscaled view is built for a factor and a geometry; an undo can
+    // change either, and a view left standing draws at the wrong size.
+    maybeReupscale(get)
     scheduleAutosave(get, set)
   },
 
@@ -1678,6 +1681,7 @@ export const useEditor = create<EditorState>((set, get) => ({
     })
     maybeRedevelop(before, get, set)
     maybeReresolveLens(edits, get)
+    maybeReupscale(get)
     scheduleAutosave(get, set)
   },
 
@@ -1964,12 +1968,15 @@ function maybeReupscale(get: Getter): void {
   if (wanted && photo.upscaled?.sig === upscaleSignature(edits)) return
   if (cropping || activeTool === 'crop' || activeTool === 'retouch') return
   if (upscaleTimer) clearTimeout(upscaleTimer)
+  // A view that is no longer wanted comes down at once — there is nothing to
+  // debounce, and every frame it stays up is drawn at the wrong size. Only a
+  // rebuild for a changed geometry waits for the slider to settle.
   upscaleTimer = setTimeout(
     () => {
       upscaleTimer = null
       void get().refreshUpscale()
     },
-    wanted && !photo.upscaled ? 0 : 250,
+    wanted && photo.upscaled ? 250 : 0,
   )
 }
 
