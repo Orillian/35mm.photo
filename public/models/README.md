@@ -88,7 +88,7 @@ dwarfed by the runtime it needs: this model runs on ONNX Runtime's WebGPU
 build, which is 27 MB against the detector's 14, and is fetched separately
 the first time a photo is upscaled.
 
-Run tiled — 256 px tiles with 16 px of overlap on WebGPU, 128 px on the CPU —
+Run tiled — 256 px tiles with 16 px of overlap on WebGPU, 192 px on the CPU —
 because the model's memory grows with the picture. Measured on an Apple
 M-series laptop: about a quarter of a second per 512² of input on WebGPU, and
 thirteen seconds on the CPU, which is why the CPU is only offered a small

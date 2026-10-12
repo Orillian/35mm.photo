@@ -117,21 +117,25 @@ the camera and lens in the file.
 
 ## On-device AI
 
-Two small models ship with 35mm. Both run in a Web Worker on
-[ONNX Runtime Web](https://onnxruntime.ai/), on your CPU, with nothing uploaded
-anywhere. In a browser tab neither is downloaded until you ask for the feature
-that uses it; an installed app fetches smart fill on its own. Once fetched,
-both are kept, so they work offline.
+Three small models ship with 35mm. All run in a Web Worker on
+[ONNX Runtime Web](https://onnxruntime.ai/), with nothing uploaded anywhere:
+the subject detector and smart fill on your CPU, the upscaler on your GPU
+through WebGPU, falling back to the CPU for a small picture. In a browser tab
+none is downloaded until you ask for the feature that uses it; an installed
+app fetches smart fill on its own. Once fetched, each is kept, so they work
+offline.
 
-| | Subject masks | Smart fill |
-| --- | --- | --- |
-| **Model** | [U²-Netp](https://github.com/xuebinqin/U-2-Net) — salient object detection | [MI-GAN](https://github.com/Picsart-AI-Research/MI-GAN) — image inpainting (ICCV 2023) |
-| **What it does** | Finds the subject of the photo; a guided filter then refines the edge against the full-resolution picture | Paints in what a heal cannot, on a 512×512 window around the stroke |
-| **Size** | 2.3 MB | 14.2 MB |
-| **Precision** | float16, converted from the float32 release | float16 weights, float32 arithmetic — within one level of the original |
-| **Licence** | Apache-2.0 | MIT |
+| | Subject masks | Smart fill | Upscaling |
+| --- | --- | --- | --- |
+| **Model** | [U²-Netp](https://github.com/xuebinqin/U-2-Net) — salient object detection | [MI-GAN](https://github.com/Picsart-AI-Research/MI-GAN) — image inpainting (ICCV 2023) | [Real-ESRGAN](https://github.com/xinntao/Real-ESRGAN) general x4 v3 — super-resolution (ICCVW 2021) |
+| **What it does** | Finds the subject of the photo; a guided filter then refines the edge against the full-resolution picture | Paints in what a heal cannot, on a 512×512 window around the stroke | Enlarges the picture ×4 (×2 is the same pass halved on the way out), in 256 px tiles with 16 px of overlap so the seams never show |
+| **Architecture** | U²-Net "portable" | MI-GAN, Places2 512 | SRVGGNetCompact — 32 3×3 convolutions at 64 channels, 1.2 M parameters |
+| **Size** | 2.3 MB | 14.2 MB | 4.9 MB, plus the 27 MB WebGPU runtime the first time |
+| **Precision** | float16, converted from the float32 release | float16 weights, float32 arithmetic — within one level of the original | float32, the upstream release unaltered |
+| **Runs on** | CPU | CPU | GPU (WebGPU); CPU for pictures under 1.2 MP |
+| **Licence** | Apache-2.0 | MIT | BSD-3-Clause |
 
-Both were picked for being small enough to ship to a browser and licensed
+All three were picked for being small enough to ship to a browser and licensed
 openly enough to ship at all. Details, conversions and the reasons behind them
 are in [public/models/README.md](public/models/README.md).
 
@@ -155,10 +159,10 @@ are in [public/models/README.md](public/models/README.md).
   without losing it
 - **Batch editing** — open a folder, sync settings by group across a selection,
   export the lot into one folder
-- **Sidecars** — edits save as `.35mm.json` next to your photos, so they travel
-  with the files
+- **Project files** — a `.35mm` holds the photo and its edits together, to
+  reopen later anywhere; edits alone save as `.35mm.json`, a preset for any photo
 - **Installs as an app** and works offline, including raw development, HEIC
-  and — once loaded — both AI models
+  and — once loaded — all three AI models
 
 ## Formats
 
@@ -174,8 +178,11 @@ are in [public/models/README.md](public/models/README.md).
 ### Upscaling, for the small ones
 
 Open a photo under 2000 px on its long edge and 35mm offers to upscale it —
-×2 or ×4, with Real-ESRGAN's compact model, on your own GPU, and shows you the
-result. It is the last stage of the stack, run on the cropped picture, so a
+×2 or ×4, with Real-ESRGAN's compact *general x4 v3* model (4.9 MB, see
+[On-device AI](#on-device-ai)), on your own GPU through WebGPU, and shows you
+the result. On a laptop GPU it is about a quarter of a second per 512² of
+input; without WebGPU it runs on the CPU, which is slow enough that only a
+small picture is offered. It is the last stage of the stack, run on the cropped picture, so a
 small crop of a large photo can be upscaled too; the Upscale panel sets it,
 the stack shows it, ⌘Z undoes it. The model is fetched the first time, like
 the subject detector.
@@ -247,7 +254,7 @@ src/
   io/           file pickers, decoding, export, sidecars, EXIF
   pwa/          service worker registration and prefetch
 public/
-  models/       the two ONNX models, and how they were converted
+  models/       the three ONNX models, and how they were converted
   lensdb/       the Lensfun database, as JSON
 ```
 
