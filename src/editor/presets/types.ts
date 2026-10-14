@@ -12,7 +12,7 @@ export interface Lut3D {
 }
 
 /** Import formats understood by `presets/import` (spec §4.3.1). */
-export type PresetFormat = 'cube' | 'hald' | 'xmp' | 'lrtemplate' | 'dcp'
+export type PresetFormat = 'cube' | 'hald' | 'xmp' | 'lrtemplate' | 'dcp' | 'auto'
 
 /**
  * A preset the user brought in from their own files. Two shapes hide behind

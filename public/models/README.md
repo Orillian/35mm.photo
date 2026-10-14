@@ -93,3 +93,34 @@ because the model's memory grows with the picture. Measured on an Apple
 M-series laptop: about a quarter of a second per 512² of input on WebGPU, and
 thirteen seconds on the CPU, which is why the CPU is only offered a small
 picture.
+
+## `mobilenetv2-12-int8.onnx`
+
+MobileNetV2 — the ImageNet classifier behind the auto look's scene tag. 3.7 MB,
+224×224 in, 1000 logits out. It knows *things*, not scenes, so the app sums its
+probabilities over the things a scene is made of (food on a plate, a ski, a
+streetcar, a jersey on somebody — see `src/editor/auto-look/scene-classes.ts`,
+generated from the Model Zoo's `synset.txt`). Sunsets, night and portraits
+have no classes to speak of; the picture's own statistics decide those.
+
+| | |
+| --- | --- |
+| Licence | Apache-2.0 |
+| Paper | Sandler et al., *MobileNetV2: Inverted Residuals and Linear Bottlenecks*, CVPR 2018 |
+| Source | https://github.com/onnx/models (`validated/vision/classification/mobilenet`, `mobilenetv2-12-int8.onnx`) |
+| Trained on | ImageNet-1k |
+| SHA-256 | `cc028fe6cae7bc11a4ff53cfc9b79c920e8be65ce33a904ec3e2a8f66d77f95f` |
+
+Int8, as the Model Zoo publishes it: quantised by its maintainers, who report
+its ImageNet accuracy within about a point of the float32 original, at a
+quarter of the size. The smallest thing that does the job; a true scene
+classifier (Places365) would be 45 MB, or 11 MB quantised, for a tag that the
+statistics already get right where it matters most.
+
+Fetched the first time a photo is opened with the auto look on, from our own
+origin, and kept by the service worker — together with the subject detector
+above, which the auto look also runs: skin on the *subject* is what makes a
+portrait, and the classifier cannot see a person who is small in the frame or
+wrapped in a towel. Both share one runtime, so the first open fetches it once. Runs on the CPU in the analysis
+worker, after the statistics it sits beside, which are what the look is built
+from first — so a slow first fetch delays the scene tag, never the look.

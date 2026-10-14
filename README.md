@@ -117,25 +117,26 @@ the camera and lens in the file.
 
 ## On-device AI
 
-Three small models ship with 35mm. All run in a Web Worker on
+Four small models ship with 35mm. All run in a Web Worker on
 [ONNX Runtime Web](https://onnxruntime.ai/), with nothing uploaded anywhere:
-the subject detector and smart fill on your CPU, the upscaler on your GPU
-through WebGPU, falling back to the CPU for a small picture. In a browser tab
-none is downloaded until you ask for the feature that uses it; an installed
-app fetches smart fill on its own. Once fetched, each is kept, so they work
-offline.
+the subject detector, smart fill and the scene classifier on your CPU, the
+upscaler on your GPU through WebGPU, falling back to the CPU for a small
+picture. In a browser tab none is downloaded until the feature that uses it
+asks — the classifier the first time a photo opens with the auto look on; an
+installed app fetches smart fill on its own. Once fetched, each is kept, so
+they work offline.
 
-| | Subject masks | Smart fill | Upscaling |
-| --- | --- | --- | --- |
-| **Model** | [U²-Netp](https://github.com/xuebinqin/U-2-Net) — salient object detection | [MI-GAN](https://github.com/Picsart-AI-Research/MI-GAN) — image inpainting (ICCV 2023) | [Real-ESRGAN](https://github.com/xinntao/Real-ESRGAN) general x4 v3 — super-resolution (ICCVW 2021) |
-| **What it does** | Finds the subject of the photo; a guided filter then refines the edge against the full-resolution picture | Paints in what a heal cannot, on a 512×512 window around the stroke | Enlarges the picture ×4 (×2 is the same pass halved on the way out), in 256 px tiles with 16 px of overlap so the seams never show |
-| **Architecture** | U²-Net "portable" | MI-GAN, Places2 512 | SRVGGNetCompact — 32 3×3 convolutions at 64 channels, 1.2 M parameters |
-| **Size** | 2.3 MB | 14.2 MB | 4.9 MB, plus the 27 MB WebGPU runtime the first time |
-| **Precision** | float16, converted from the float32 release | float16 weights, float32 arithmetic — within one level of the original | float32, the upstream release unaltered |
-| **Runs on** | CPU | CPU | GPU (WebGPU); CPU for pictures under 1.2 MP |
-| **Licence** | Apache-2.0 | MIT | BSD-3-Clause |
+| | Subject masks | Smart fill | Upscaling | Auto look |
+| --- | --- | --- | --- | --- |
+| **Model** | [U²-Netp](https://github.com/xuebinqin/U-2-Net) — salient object detection | [MI-GAN](https://github.com/Picsart-AI-Research/MI-GAN) — image inpainting (ICCV 2023) | [Real-ESRGAN](https://github.com/xinntao/Real-ESRGAN) general x4 v3 — super-resolution (ICCVW 2021) | [MobileNetV2](https://github.com/onnx/models) — ImageNet classifier (CVPR 2018) |
+| **What it does** | Finds the subject of the photo; a guided filter then refines the edge against the full-resolution picture. Also tells the auto look where the subject is, so skin *on the subject* can call a portrait — a person small in the frame, or wrapped in a towel | Paints in what a heal cannot, on a 512×512 window around the stroke | Enlarges the picture ×4 (×2 is the same pass halved on the way out), in 256 px tiles with 16 px of overlap so the seams never show | Tells the auto look what the photo is of — food, street, interior, landscape, snow or beach, the things a person wears or is wrapped in — so it knows what to leave alone; sunsets and night are read from the picture's own statistics |
+| **Architecture** | U²-Net "portable" | MI-GAN, Places2 512 | SRVGGNetCompact — 32 3×3 convolutions at 64 channels, 1.2 M parameters | MobileNetV2, 3.5 M parameters |
+| **Size** | 2.3 MB | 14.2 MB | 4.9 MB, plus the 27 MB WebGPU runtime the first time | 3.7 MB |
+| **Precision** | float16, converted from the float32 release | float16 weights, float32 arithmetic — within one level of the original | float32, the upstream release unaltered | int8, as the Model Zoo publishes it |
+| **Runs on** | CPU | CPU | GPU (WebGPU); CPU for pictures under 1.2 MP | CPU |
+| **Licence** | Apache-2.0 | MIT | BSD-3-Clause | Apache-2.0 |
 
-All three were picked for being small enough to ship to a browser and licensed
+All four were picked for being small enough to ship to a browser and licensed
 openly enough to ship at all. Details, conversions and the reasons behind them
 are in [public/models/README.md](public/models/README.md).
 
@@ -159,10 +160,17 @@ are in [public/models/README.md](public/models/README.md).
   without losing it
 - **Batch editing** — open a folder, sync settings by group across a selection,
   export the lot into one folder
+- **Auto look** — every photo is looked at as it opens, on this device: its
+  statistics, the subject detector and a small scene classifier shape a look
+  built for it, named and offered at the top of the Looks panel, with what it
+  took the photo to be shown in the bottom bar. An offer, not an edit, until
+  you click it; every value it sets stays editable, and it can be kept as a
+  preset. `scripts/auto-look-harness.py` runs the whole thing over a folder of
+  your own photos and prints what it would decide
 - **Project files** — a `.35mm` holds the photo and its edits together, to
   reopen later anywhere; edits alone save as `.35mm.json`, a preset for any photo
 - **Installs as an app** and works offline, including raw development, HEIC
-  and — once loaded — all three AI models
+  and — once loaded — all four AI models
 
 ## Formats
 
@@ -254,7 +262,7 @@ src/
   io/           file pickers, decoding, export, sidecars, EXIF
   pwa/          service worker registration and prefetch
 public/
-  models/       the three ONNX models, and how they were converted
+  models/       the four ONNX models, and how they were converted
   lensdb/       the Lensfun database, as JSON
 ```
 

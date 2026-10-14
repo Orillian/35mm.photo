@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { horizonAngle } from './horizon'
+import { horizonAngle, STRAIGHTEN_LIMIT } from './horizon'
 
 const at = (deg: number, len = 200) => {
   const r = (deg * Math.PI) / 180
@@ -32,6 +32,21 @@ describe('horizonAngle', () => {
     expect(horizonAngle(0, ...at(85))).toBe(5)
     expect(horizonAngle(0, ...at(95))).toBe(-5)
     expect(horizonAngle(0, ...at(-85))).toBe(-5)
+  })
+
+  it('told the line is a vertical, measures its lean from upright whichever way it was drawn', () => {
+    expect(horizonAngle(0, ...at(85), 'vertical')).toBe(5)
+    expect(horizonAngle(0, ...at(-95), 'vertical')).toBe(5)
+    expect(horizonAngle(0, ...at(92), 'vertical')).toBe(-2)
+    expect(horizonAngle(0, ...at(90), 'vertical')).toBe(0)
+  })
+
+  it('told the line is a horizon, takes it at its word rather than guessing', () => {
+    // Steeper than 45°: the guess would call this an upright; the button says otherwise.
+    // Guessed as an upright leaning 40°, which the slider caps; told it is a horizon, a 50° dip, capped the other way.
+    expect(horizonAngle(0, ...at(50), 'auto')).toBe(STRAIGHTEN_LIMIT)
+    expect(horizonAngle(0, ...at(50), 'horizon')).toBe(-STRAIGHTEN_LIMIT)
+    expect(horizonAngle(0, ...at(3), 'horizon')).toBe(-3)
   })
 
   it('stops at the slider limit', () => {

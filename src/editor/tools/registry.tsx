@@ -55,6 +55,8 @@ export interface ToolDef {
    */
   short?: string
   Icon: ComponentType<{ size?: number }>
+  /** Runs an on-device model, and wears the sparkle to say so. */
+  ai?: boolean
   Content: ComponentType
   /** True when this tool holds values away from their defaults. */
   isDirty: (edits: EditState) => boolean
@@ -198,6 +200,7 @@ export const TOOLS: ToolDef[] = [
     label: 'Upscale',
     hint: 'super-resolution on export, after the crop',
     Icon: IconUpscale,
+    ai: true,
     Content: UpscaleTool,
     isDirty: (e) => e.upscale > 1,
     reset: () => ({ upscale: 1 }),

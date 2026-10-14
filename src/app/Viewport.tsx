@@ -18,6 +18,7 @@ import { UpscaleBanner } from './UpscaleBanner'
 import { onFillFallback, retouchPatches } from '../retouch/retouch'
 import { blurCoverage, withLiveStroke } from '../retouch/coverage'
 import { GridOverlay } from './GridOverlay'
+import { WhitePickerOverlay } from './WhitePickerOverlay'
 import { isMiddleButton, stageGesture } from './stage-gesture'
 
 /** Histogram readback size — enough bins to be representative, cheap to read. */
@@ -346,6 +347,7 @@ export function Viewport() {
     [committedBlur, retouchLive, photo],
   )
   const grid = useEditor((s) => s.grid)
+  const wbPicking = useEditor((s) => s.wbPicking)
 
   useEffect(() => {
     onFillFallback(() => toast('Smart fill could not run, so that spot was healed instead', 'error'))
@@ -1161,6 +1163,7 @@ export function Viewport() {
           {retouching && !cropping && (
             <RetouchOverlay width={cssWidth} height={cssHeight} lens={lensU} />
           )}
+          {wbPicking && !cropping && <WhitePickerOverlay width={cssWidth} height={cssHeight} lens={lensU} />}
         </div>
       </div>
 

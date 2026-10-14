@@ -56,6 +56,11 @@ import type { OpenedFile } from '../../io/file-system'
 import { isProjectFile, parseProject, projectFile, saveProject } from '../../io/project'
 import type { LiveStroke } from '../../retouch/coverage'
 import { loadGrid, saveGrid, type GridSettings } from './grid'
+import { neutralise } from '../tools/white-picker'
+import { loadAutoLookOn, saveAutoLookOn } from '../auto-look/preference'
+import { classify, locateSubject, measure } from '../auto-look/analysis'
+import { buildAutoLook, type AutoLook } from '../auto-look/rules'
+import { chooseScene, sceneFromStats, type SceneGuess } from '../auto-look/scene'
 import { DEFAULT_EXPORT, sidecarFile, saveSidecar, type ExportSettings } from '../../io/export'
 import { writeToHandle } from '../../io/file-system'
 import {
@@ -117,6 +122,14 @@ export interface OpenPhoto {
   /** The file itself, for readers that want the bytes rather than the pixels. */
   file: File
   handle?: FileSystemFileHandle
+}
+
+export interface AutoLookState {
+  frameId: string
+  look: AutoLook | null
+  scene: SceneGuess | null
+  /** The classifier has not answered yet; the look may still change once. */
+  classifying: boolean
 }
 
 interface EditorState {
@@ -205,6 +218,8 @@ interface EditorState {
   cropGuideTurn: number
   /** The crop overlay is taking a drawn line as the horizon, not a box drag. */
   drawingHorizon: boolean
+  /** What the horizon layer is drawing: a level line, or an upright. */
+  levelAxis: 'horizon' | 'vertical'
   /**
    * True while the phone's tool sheet is being dragged between its heights.
    * Same problem as `cropDragging`, one level up: the sheet shortens the stage
@@ -225,6 +240,16 @@ interface EditorState {
   retouchLive: LiveStroke | null
   /** The grid overlay — a viewing aid, remembered across sessions. */
   grid: GridSettings
+  /** The white picker is up: the next click on the picture sets the white balance. */
+  wbPicking: boolean
+  /**
+   * What the auto look made of the open photo. The statistics answer first
+   * and the classifier a moment later, so the look can change once; it is an
+   * offer in the Looks panel until applied, and touches nothing on its own.
+   */
+  autoLook: AutoLookState | null
+  /** Whether a photo is looked at on opening, remembered across sessions. */
+  autoLookOn: boolean
   /**
    * The brush the next stroke is drawn with. Size is a share of the picture's
    * shorter edge, as a stroke stores it, so the brush covers the same part of
@@ -358,7 +383,7 @@ interface EditorState {
   updateMaskAdjust: (id: string, patch: Partial<MaskAdjust>, coalesceKey?: string) => void
   setCropDragging: (on: CropDrag) => void
   setCropGuide: (guide: CropGuide, turn?: number) => void
-  setDrawingHorizon: (on: boolean) => void
+  setDrawingHorizon: (on: boolean, axis?: 'horizon' | 'vertical') => void
   setSheetDragging: (on: boolean) => void
   setMaskOverlay: (on: boolean) => void
   /** Commit a drawn stroke: find where it heals from, and whether it should fill. */
@@ -369,6 +394,15 @@ interface EditorState {
   setRetouchBrush: (patch: Partial<EditorState['retouchBrush']>) => void
   setRetouchLive: (live: LiveStroke | null) => void
   setGrid: (patch: Partial<GridSettings>) => void
+  setWbPicking: (on: boolean) => void
+  analyseOpenPhoto: () => Promise<void>
+  /** Put the auto look on the edit stack, as one undoable step. */
+  applyAutoLook: () => void
+  /** Keep the auto look's slider values as a preset of the user's own. */
+  saveAutoLook: () => Promise<void>
+  setAutoLookOn: (on: boolean) => void
+  /** Set warmth and tint so the sampled colour (linear RGB) comes out neutral. */
+  applyWhitePick: (linear: [number, number, number]) => void
   setSmartFill: (on: boolean) => void
   /** Download the fill model, once; after that it is kept. */
   loadFillModel: () => Promise<void>
@@ -479,11 +513,15 @@ export const useEditor = create<EditorState>((set, get) => ({
   cropGuide: savedGuide.guide,
   cropGuideTurn: savedGuide.turn,
   drawingHorizon: false,
+  levelAxis: 'horizon',
   sheetDragging: false,
   maskOverlay: true,
   activeRetouchId: null,
   retouchLive: null,
   grid: loadGrid(),
+  wbPicking: false,
+  autoLook: null,
+  autoLookOn: loadAutoLookOn(),
   retouchBrush: { size: DEFAULT_BRUSH_SIZE, feather: 50, mode: 'heal', strength: DEFAULT_STRENGTH },
   smartFill: loadSmartFill(),
   retouchPlanning: false,
@@ -623,6 +661,7 @@ export const useEditor = create<EditorState>((set, get) => ({
       selectionAnchor: id,
       cropping: false,
       drawingHorizon: false,
+      wbPicking: false,
     })
 
     try {
@@ -709,6 +748,7 @@ export const useEditor = create<EditorState>((set, get) => ({
       // whatever was found before; find the rest, if that costs no download.
       void get().autoDetectSubjects()
       void get().resolveLensProfile()
+      void get().analyseOpenPhoto()
       // A photo saved with an upscale opens upscaled, with the bar to show for it.
       if (edits.upscale > 1) void get().refreshUpscale()
       // A restore that never reports back must not leave the card up for good.
@@ -1015,6 +1055,7 @@ export const useEditor = create<EditorState>((set, get) => ({
       hidden: [],
       histogram: null,
       pendingAutoExpose: null,
+      autoLook: null,
       lensProfile: null,
       activeMaskId: null,
       activeRetouchId: null,
@@ -1504,8 +1545,11 @@ export const useEditor = create<EditorState>((set, get) => ({
     if (get().cropDragging !== on) set({ cropDragging: on })
   },
 
-  setDrawingHorizon(on) {
-    if (get().drawingHorizon !== on) set({ drawingHorizon: on })
+  setDrawingHorizon(on, axis) {
+    const next: Partial<EditorState> = {}
+    if (get().drawingHorizon !== on) next.drawingHorizon = on
+    if (axis && get().levelAxis !== axis) next.levelAxis = axis
+    if (Object.keys(next).length) set(next)
   },
 
   setSheetDragging(on) {
@@ -1597,6 +1641,103 @@ export const useEditor = create<EditorState>((set, get) => ({
     const grid = { ...get().grid, ...patch }
     set({ grid })
     saveGrid(grid)
+  },
+
+  setWbPicking(on) {
+    set({ wbPicking: on })
+  },
+
+  async analyseOpenPhoto() {
+    const { photo, activeFrameId, autoLookOn } = get()
+    if (!photo || !activeFrameId || !autoLookOn) {
+      set({ autoLook: null })
+      return
+    }
+    const frameId = activeFrameId
+    const meta = { iso: photo.meta.iso }
+    set({ autoLook: { frameId, look: null, scene: null, classifying: true } })
+    try {
+      // Statistics first: milliseconds, and enough for a look. The classifier
+      // follows — it may be fetching its model — and the look is rebuilt when
+      // it lands, so a sunset is never corrected away while it is on its way.
+      const quick = await measure(photo.preview, photo.meta.orientation)
+      if (get().activeFrameId !== frameId) return
+      const first = chooseScene(sceneFromStats(quick, meta), null)
+      set({ autoLook: { frameId, look: buildAutoLook(quick, first, meta), scene: first, classifying: true } })
+
+      // The two models side by side, sharing a runtime: the detector says
+      // where the subject is, which the statistics need to call a portrait;
+      // the classifier says what the rest is.
+      const [subject, fromModel] = await Promise.all([
+        locateSubject(frameId, photo.preview),
+        classify(photo.preview, photo.meta.orientation),
+      ])
+      if (get().activeFrameId !== frameId) return
+      const stats = subject ? await measure(photo.preview, photo.meta.orientation, subject) : quick
+      if (get().activeFrameId !== frameId) return
+      const scene = chooseScene(sceneFromStats(stats, meta), fromModel)
+      set({ autoLook: { frameId, look: buildAutoLook(stats, scene, meta), scene, classifying: false } })
+    } catch (err) {
+      console.warn('[35mm] could not look at the photo', err)
+      const current = get().autoLook
+      if (current?.frameId === frameId) set({ autoLook: { ...current, classifying: false } })
+    }
+  },
+
+  applyAutoLook() {
+    const { autoLook, photo } = get()
+    const look = autoLook?.look
+    if (!look || !photo || autoLook.frameId !== photo.frameId) return
+    const config = look.lookId ? getLook(look.lookId) : null
+    get().update(
+      {
+        ...look.edits,
+        look: { id: look.lookId, strength: look.lookStrength },
+        // A built-in look brings its grain, as clicking it in the grid would.
+        ...(config && !config.custom ? { grain: config.grain.amount, grainSize: config.grain.size } : {}),
+      },
+      'auto-look',
+    )
+  },
+
+  async saveAutoLook() {
+    const look = get().autoLook?.look
+    if (!look || look.kind !== 'look') return
+    const preset: CustomPreset = {
+      id: `custom:${crypto.randomUUID()}`,
+      name: look.name,
+      kind: 'parametric',
+      format: 'auto',
+      filename: 'Auto look',
+      createdAt: Date.now(),
+      edits: { ...look.edits },
+    }
+    await db.savePreset(preset)
+    publishPresets([preset, ...get().presets], set)
+    get().toast(`Saved "${look.name}" to your presets`)
+  },
+
+  setAutoLookOn(on) {
+    set({ autoLookOn: on })
+    saveAutoLookOn(on)
+    if (on) void get().analyseOpenPhoto()
+    else set({ autoLook: null })
+  },
+
+  applyWhitePick(linear) {
+    // One click, whatever it lands on: the picker is a single question.
+    set({ wbPicking: false })
+    const found = neutralise(linear)
+    if ('problem' in found) {
+      get().toast(
+        found.problem === 'dark'
+          ? 'Too dark to read a colour from — pick something lighter that should be neutral'
+          : 'That spot has clipped, so its colour is gone — pick a lighter grey, not a white',
+        'warn',
+      )
+      return
+    }
+    get().update({ temperature: found.temperature, tint: found.tint }, 'wb-pick')
   },
 
   setSmartFill(on) {

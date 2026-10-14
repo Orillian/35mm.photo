@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { IconSparkle } from './ui/icons'
 import { useEditor } from '../editor/edit-stack/store'
 import { getTool } from '../editor/tools/registry'
 import { IconCheck, IconCross } from './ui/icons'
@@ -69,7 +70,10 @@ export function ToolPanel() {
             to undo it. */}
         <div className="tool-panel__row">
           <span className="tool-panel__icon" aria-hidden>
-            <tool.Icon size={17} />
+            <span className="tool-icon" data-ai={tool.ai || undefined}>
+              <tool.Icon size={17} />
+              {tool.ai && <IconSparkle size={8} className="tool-icon__ai" />}
+            </span>
           </span>
           <h2 className="tool-panel__title">{tool.label}</h2>
 

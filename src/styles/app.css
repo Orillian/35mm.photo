@@ -223,6 +223,40 @@
 }
 .link-button:hover:not(:disabled) { color: var(--link-hover); }
 .link-button:disabled { color: var(--text-faint); cursor: default; }
+.link-button--icon { display: inline-flex; align-items: center; gap: 5px; }
+.link-button[data-on] { color: var(--accent-text); }
+
+/* The sparkle on anything that runs a model: on a tab's icon corner, or inline before a label. */
+.tool-icon { position: relative; display: inline-flex; }
+.tool-icon__ai { position: absolute; top: -5px; right: -7px; color: var(--accent); }
+.tool__ai { display: inline-flex; align-items: center; gap: 6px; }
+.tool__ai svg { color: var(--accent); }
+.button .button__ai { margin-right: 6px; color: var(--accent); }
+
+/* The white picker: the whole picture is the target, under a crosshair. */
+.white-picker { position: absolute; inset: 0; z-index: 6; cursor: crosshair; }
+.white-picker__target { fill: transparent; pointer-events: auto; }
+/* The loupe: the source pixels under the pointer, each drawn as a square, the
+   one that will be read framed in the middle. */
+.white-picker__loupe {
+  position: absolute;
+  z-index: 7;
+  pointer-events: none;
+  overflow: hidden;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: #000;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.55);
+}
+.white-picker__loupe canvas { display: block; image-rendering: pixelated; }
+.white-picker__loupe-centre {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  border: 1px solid rgba(242, 234, 220, 0.95);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.7);
+}
 
 /*
  * Rotate left / rotate right, then flip H / flip V.
@@ -243,7 +277,6 @@
   max-width: 340px;
 }
 .transform-grid .button { justify-content: center; }
-.transform-grid__wide { grid-column: 1 / -1; }
 
 /* ───────────────────────────── tool bar ───────────────────────────── */
 
@@ -1250,6 +1283,23 @@
 
 .looks__section { display: flex; flex-direction: column; gap: 6px; }
 .looks__section + .looks__section { margin-top: 12px; }
+/* The auto look: its own section at the top, with the switch in its header. */
+.looks__ai { display: inline-flex; align-items: center; gap: 5px; }
+.looks__ai svg { color: var(--accent); }
+.looks__auto-toggle { margin-left: auto; font-size: 12px; }
+.looks__auto .looks__grid { grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); align-items: start; }
+.looks__auto-hint { margin: 0; font-size: 12px; line-height: 1.45; color: var(--text-muted); }
+.look__badge--auto { display: inline-flex; align-items: center; gap: 3px; color: var(--accent-text); }
+.look__badge--auto svg { color: var(--accent); }
+.bottombar__scene {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 13px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.bottombar__scene svg { color: var(--accent); }
 
 .looks__section-head {
   display: flex;

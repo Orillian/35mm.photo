@@ -27,6 +27,8 @@ const BUILD = [
   'assets/upscale-worker-Cx9pLq2a.js',
   'assets/ort-wasm-simd-threaded.asyncify-Ab12Cd34.wasm',
   'models/realesr-general-x4v3.onnx',
+  'assets/analysis-worker-Qq77Ww11.js',
+  'models/mobilenetv2-12-int8.onnx',
   'sw.js',
   'precache.json',
   'sitemap.xml',
@@ -69,6 +71,12 @@ describe('groupAssets', () => {
     expect(groups.subject).not.toContain('models/realesr-general-x4v3.onnx')
   })
 
+  it('files the scene classifier and its worker under scene, apart from the detector', () => {
+    expect(groups.scene).toEqual(['assets/analysis-worker-Qq77Ww11.js', 'models/mobilenetv2-12-int8.onnx'])
+    expect(groups.subject).not.toContain('models/mobilenetv2-12-int8.onnx')
+    expect(groups.shell).not.toContain('assets/analysis-worker-Qq77Ww11.js')
+  })
+
   it('keeps the heal worker in the shell, where the brush needs it', () => {
     expect(groups.shell).toContain('assets/heal-worker-D1xZr7Qe.js')
   })
@@ -97,13 +105,13 @@ describe('groupAssets', () => {
   })
 
   it('never caches the worker or the manifest that describe the cache', () => {
-    const all = [...groups.shell, ...groups.raw, ...groups.heic, ...groups.subject, ...groups.fill, ...groups.upscale]
+    const all = [...groups.shell, ...groups.raw, ...groups.heic, ...groups.subject, ...groups.fill, ...groups.upscale, ...groups.scene]
     expect(all).not.toContain('sw.js')
     expect(all).not.toContain('precache.json')
   })
 
   it('accounts for every file exactly once', () => {
-    const all = [...groups.shell, ...groups.raw, ...groups.heic, ...groups.subject, ...groups.fill, ...groups.upscale]
+    const all = [...groups.shell, ...groups.raw, ...groups.heic, ...groups.subject, ...groups.fill, ...groups.upscale, ...groups.scene]
     expect(new Set(all).size).toBe(all.length)
     expect(all.length).toBe(BUILD.length - 3) // sw.js, precache.json, sitemap.xml
   })

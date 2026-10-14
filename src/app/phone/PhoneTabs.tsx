@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef } from 'react'
+import { IconSparkle } from '../ui/icons'
 import { useEditor } from '../../editor/edit-stack/store'
 import { availableTools } from '../../editor/tools/registry'
 
@@ -45,7 +46,10 @@ export function PhoneTabs() {
             aria-pressed={open}
             onClick={() => openTool(tool.id)}
           >
-            <tool.Icon size={19} />
+            <span className="tool-icon" data-ai={tool.ai || undefined}>
+              <tool.Icon size={19} />
+              {tool.ai && <IconSparkle size={8} className="tool-icon__ai" />}
+            </span>
             <span className="phone-tab__label">{tool.short ?? tool.label}</span>
             {tool.isDirty(edits) && <span className="phone-tab__dot" aria-label="has edits" />}
           </button>

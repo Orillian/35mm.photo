@@ -4,7 +4,7 @@ import { useEditor } from '../edit-stack/store'
 import { displaySize, outputSize } from '../gpu/transform'
 import { formatAspect, parseAspectRatio } from '../edit-stack/aspect'
 import {
-  IconFlipH, IconFlipV, IconLevel, IconLock, IconLockOpen, IconRotateLeft, IconRotateRight, IconSwap,
+  IconFlipH, IconFlipV, IconLevel, IconLock, IconLockOpen, IconPlumb, IconRotateLeft, IconRotateRight, IconSwap,
 } from '../../app/ui/icons'
 import { STRAIGHTEN_LIMIT } from '../edit-stack/horizon'
 import { swapOrientation, toggleAspectLock } from '../edit-stack/crop-drag'
@@ -29,6 +29,7 @@ export function CropTool() {
   const detecting = useEditor((s) => s.detecting)
   const drawingHorizon = useEditor((s) => s.drawingHorizon)
   const setDrawingHorizon = useEditor((s) => s.setDrawingHorizon)
+  const levelAxis = useEditor((s) => s.levelAxis)
   const guide = useEditor((s) => s.cropGuide)
   const guideTurn = useEditor((s) => s.cropGuideTurn)
   const setCropGuide = useEditor((s) => s.setCropGuide)
@@ -327,7 +328,7 @@ export function CropTool() {
           <p className="tool__hint">
             Drag inside the frame to move the photo under it, the handles to reshape it, and
             outside it to turn the photo. <strong>⌥</strong> resizes from the centre,{' '}
-            <strong>⇧</strong> holds the shape, <strong>⌘</strong>-drag draws a horizon,
+            <strong>⇧</strong> holds the shape, <strong>⌘</strong>-drag draws a horizon or an upright,
             arrow keys nudge by a pixel, double-click applies.
           </p>
         </section>
@@ -375,17 +376,27 @@ export function CropTool() {
             format={(v) => `${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(v).toFixed(1)}°`}
             onChange={setAngle}
           />
-          {/* Two rotates, then two flips — see .transform-grid. */}
+          {/* A horizon and a plumb line, then two rotates, then two flips — see .transform-grid. */}
           <div className="transform-grid">
             <button
-              className="button button--toggle transform-grid__wide"
-              data-on={drawingHorizon || undefined}
-              aria-pressed={drawingHorizon}
-              onClick={() => setDrawingHorizon(!drawingHorizon)}
+              className="button button--toggle"
+              data-on={(drawingHorizon && levelAxis === 'horizon') || undefined}
+              aria-pressed={drawingHorizon && levelAxis === 'horizon'}
+              onClick={() => setDrawingHorizon(!(drawingHorizon && levelAxis === 'horizon'), 'horizon')}
               title="Draw along the horizon to level it · ⌘/Ctrl-drag on the photo"
             >
               <IconLevel size={15} />
               Draw horizon
+            </button>
+            <button
+              className="button button--toggle"
+              data-on={(drawingHorizon && levelAxis === 'vertical') || undefined}
+              aria-pressed={drawingHorizon && levelAxis === 'vertical'}
+              onClick={() => setDrawingHorizon(!(drawingHorizon && levelAxis === 'vertical'), 'vertical')}
+              title="Draw along something that should stand upright — a wall, a doorframe, a mast — to make it plumb"
+            >
+              <IconPlumb size={15} />
+              Draw vertical
             </button>
             <button
               className="button button--toggle"

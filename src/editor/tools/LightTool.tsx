@@ -2,12 +2,16 @@ import { Slider, formatSigned } from '../../app/ui/Slider'
 import { useEditor } from '../edit-stack/store'
 import { NEUTRAL_TEMPERATURE } from '../edit-stack/defaults'
 import { autoAdjust } from './auto'
+import { IconDropper } from '../../app/ui/icons'
 
 export function LightTool() {
   const edits = useEditor((s) => s.edits)
   const update = useEditor((s) => s.update)
   const histogram = useEditor((s) => s.histogram)
   const toast = useEditor((s) => s.toast)
+  const wbPicking = useEditor((s) => s.wbPicking)
+  const setWbPicking = useEditor((s) => s.setWbPicking)
+  const photo = useEditor((s) => s.photo)
 
   const onAuto = () => {
     if (!histogram) {
@@ -84,6 +88,18 @@ export function LightTool() {
         <section className="tool__group">
           <header className="tool__group-head">
             <span>Colour</span>
+            {/* Click something that should be grey and the two sliders are set together. */}
+            <button
+              className="link-button link-button--icon"
+              data-on={wbPicking || undefined}
+              aria-pressed={wbPicking}
+              disabled={!photo}
+              onClick={() => setWbPicking(!wbPicking)}
+              title="Click a spot in the photo that should be neutral — a grey card, a white wall — to set the white balance from it (Esc to stop)"
+            >
+              <IconDropper size={14} />
+              {wbPicking ? 'Click a neutral…' : 'Pick white'}
+            </button>
           </header>
           <Slider
             label="Warmth"

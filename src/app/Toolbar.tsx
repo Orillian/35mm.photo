@@ -1,4 +1,5 @@
 import { useMemo } from 'react'
+import { IconSparkle } from './ui/icons'
 import { useEditor } from '../editor/edit-stack/store'
 import { isToolbarTool, toolbarTools } from '../editor/tools/registry'
 import { buildStack } from '../editor/edit-stack/summary'
@@ -46,7 +47,10 @@ export function Toolbar() {
               onClick={() => openTool(tool.id)}
               title={tool.hint}
             >
+              <span className="tool-icon" data-ai={tool.ai || undefined}>
               <tool.Icon size={17} />
+              {tool.ai && <IconSparkle size={8} className="tool-icon__ai" />}
+            </span>
               <span className="tool-button__label">{tool.label}</span>
               {tool.isDirty(edits) && <span className="tool-button__dot" aria-label="has edits" />}
             </button>

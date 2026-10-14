@@ -1,3 +1,4 @@
+import { getLook } from '../presets/catalogue'
 import { useEffect, useRef } from 'react'
 import { Renderer } from '../gpu/renderer'
 import { getLut } from '../presets/lutCache'
@@ -87,8 +88,12 @@ export function useLookPreviews(
         // An imported Lightroom preset has no cube — it is slider values, so
         // the swatch previews it by applying them, exactly as clicking would.
         const parametric = look.custom?.kind === 'parametric' ? look.custom.edits : null
+        // A preset of slider values may name a built-in look as well — the
+        // auto look does — and the swatch should show that look on top of them.
+        const named = parametric?.look?.id ? getLook(parametric.look.id) : null
+        const withLook = parametric ? named : look
 
-        const lut = parametric ? null : await getLut(look.id)
+        const lut = withLook ? await getLut(withLook.id) : null
         if (cancelled) return
         renderer.setLut(lut)
 
@@ -97,9 +102,9 @@ export function useLookPreviews(
           edits: {
             ...edits,
             ...parametric,
-            look: parametric
-              ? { id: null, strength: 100 }
-              : { id: look.id, strength: look.defaultStrength },
+            look: withLook
+              ? { id: withLook.id, strength: parametric?.look?.strength ?? withLook.defaultStrength }
+              : { id: null, strength: 100 },
             grain: 0,
             vignette: 0,
             clarity: 0,
@@ -108,7 +113,7 @@ export function useLookPreviews(
             denoiseChroma: 0,
             crop: { ...edits.crop, x: 0, y: 0, w: 1, h: 1, angle: 0 },
           },
-          look: parametric ? null : look,
+          look: withLook,
         })
 
         const ctx = target.getContext('2d')

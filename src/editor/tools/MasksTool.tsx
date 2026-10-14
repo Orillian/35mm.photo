@@ -16,7 +16,7 @@ import {
 import { MAX_MASKS, type Mask, type MaskKind, type SubjectMask } from '../edit-stack/types'
 import { cachedSubject, isModelCached } from '../../subject/detect'
 import { SUBJECT_EDGE_DEFAULTS } from '../../subject/refine'
-import { IconCross, IconEye, IconEyeOff } from '../../app/ui/icons'
+import { IconCross, IconEye, IconEyeOff, IconSparkle } from '../../app/ui/icons'
 
 const KINDS: MaskKind[] = ['radial', 'linear', 'luminance', 'colour', 'subject']
 
@@ -448,6 +448,7 @@ function SubjectControls({ mask }: { mask: SubjectMask }) {
         disabled={detecting || !activeFrameId}
         data-busy={detecting || undefined}
       >
+        <IconSparkle size={13} className="button__ai" />
         {found ? 'Find the subject again' : 'Find the subject'}
         {detecting && <span className="spinner" aria-label="Finding the subject" />}
       </button>

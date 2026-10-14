@@ -304,6 +304,14 @@ export const IconUpscale = ({ size = 16 }: Props) => (
   </svg>
 )
 
+/** A plumb line: the upright, and the lean that is about to be taken out of it. */
+export const IconPlumb = ({ size = 16 }: Props) => (
+  <svg {...base(size)}>
+    <path d="M10.5 2.5 5.5 13.5" strokeDasharray="1.6 2" />
+    <path d="M8 2v12" />
+  </svg>
+)
+
 export const IconLevel = ({ size = 16 }: Props) => (
   <svg {...base(size)}>
     <path d="M2.5 11 13.5 5" strokeDasharray="1.6 2" />
@@ -351,6 +359,20 @@ export const IconPaste = ({ size = 16 }: Props) => (
   <svg {...base(size)}>
     <path d="M6 2.6H4.2a1.6 1.6 0 0 0-1.6 1.6v9.2a1.6 1.6 0 0 0 1.6 1.6h7.6a1.6 1.6 0 0 0 1.6-1.6V4.2a1.6 1.6 0 0 0-1.6-1.6H10" />
     <rect x="5.8" y="1" width="4.4" height="3.2" rx="1" />
+  </svg>
+)
+
+/** The sparkle every AI feature wears, so the on-device models are recognisable at a glance. */
+export const IconSparkle = ({ size = 16, className }: Props & { className?: string }) => (
+  <svg {...base(size)} className={className} strokeWidth={1.3}>
+    <path d="M8 2.2 9.4 6.6 13.8 8 9.4 9.4 8 13.8 6.6 9.4 2.2 8l4.4-1.4L8 2.2Z" />
+    <path d="M12.6 1.8v2.4M11.4 3h2.4" />
+  </svg>
+)
+
+export const IconDropper = ({ size = 16 }: Props) => (
+  <svg {...base(size)}>
+    <path d="m10.2 3.3 2.5 2.5M11.5 2l2.5 2.5-1.8 1.8L9.7 3.8 11.5 2ZM9.7 5.8 4 11.5l-.6 2.3 2.3-.6 5.7-5.7" />
   </svg>
 )
 

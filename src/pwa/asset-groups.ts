@@ -45,6 +45,8 @@ export interface AssetGroups {
   subject: string[]
   fill: string[]
   upscale: string[]
+  /** The auto look's scene classifier and its worker. */
+  scene: string[]
 }
 
 /**
@@ -61,6 +63,13 @@ const UPSCALE = /(^|\/)upscale-worker-|\.(asyncify|jspi|jsep)-|(^|\/)realesr[^/]
  * references are the whole of it, plus the weights from `public/`.
  */
 const SUBJECT = /(^|\/)(ort-wasm|subject-worker)|\.onnx$/
+
+/**
+ * The scene classifier: a small ImageNet MobileNet and the analysis worker.
+ * Checked before the detector's pattern, which would take its weights by
+ * their extension.
+ */
+const SCENE = /(^|\/)analysis-worker-|(^|\/)mobilenet[^/]*\.onnx$/
 
 /**
  * The retouch fill model. Checked before the detector's pattern, which would
@@ -88,12 +97,13 @@ const RAW = /(^|\/)(libraw|decode-raw|preview-worker|worker)-/
 const NEVER = /(^|\/)(sw\.js|precache\.json|sitemap\.xml|chunks\.json)$/
 
 export function groupAssets(files: string[]): AssetGroups {
-  const groups: AssetGroups = { shell: [], raw: [], heic: [], subject: [], fill: [], upscale: [] }
+  const groups: AssetGroups = { shell: [], raw: [], heic: [], subject: [], fill: [], upscale: [], scene: [] }
 
   for (const file of files) {
     if (NEVER.test(file)) continue
     if (UPSCALE.test(file)) groups.upscale.push(file)
     else if (FILL.test(file)) groups.fill.push(file)
+    else if (SCENE.test(file)) groups.scene.push(file)
     else if (SUBJECT.test(file)) groups.subject.push(file)
     else if (HEIC.test(file)) groups.heic.push(file)
     else if (RAW.test(file)) groups.raw.push(file)
@@ -126,7 +136,7 @@ export function verifyGroups(groups: AssetGroups): string[] {
     }
   }
 
-  for (const key of ['shell', 'raw', 'heic', 'subject', 'fill', 'upscale'] as const) {
+  for (const key of ['shell', 'raw', 'heic', 'subject', 'fill', 'upscale', 'scene'] as const) {
     if (!groups[key].length) {
       problems.push(
         `the "${key}" group is empty, which means its files were renamed and are ` +

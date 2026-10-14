@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useEditor, type CropDrag } from '../editor/edit-stack/store'
 import { parseAspectRatio } from '../editor/edit-stack/aspect'
-import { horizonAngle } from '../editor/edit-stack/horizon'
+import { horizonAngle, type LevelAxis } from '../editor/edit-stack/horizon'
 import { moveCrop, resizeCrop, rotationAngle, type Handle } from '../editor/edit-stack/crop-drag'
 import { displaySize, effectiveCrop } from '../editor/gpu/transform'
 import { CropGuides } from './CropGuides'
@@ -26,11 +26,12 @@ export function CropOverlay({ width, height }: { width: number; height: number }
   const setCropDragging = useEditor((s) => s.setCropDragging)
   const drawingHorizon = useEditor((s) => s.drawingHorizon)
   const setDrawingHorizon = useEditor((s) => s.setDrawingHorizon)
+  const levelAxis = useEditor((s) => s.levelAxis)
   const guide = useEditor((s) => s.cropGuide)
   const guideTurn = useEditor((s) => s.cropGuideTurn)
   const rootRef = useRef<HTMLDivElement>(null)
   /** The line being drawn, in pixels from the overlay's top-left. */
-  const [line, setLine] = useState<{ x1: number; y1: number; x2: number; y2: number } | null>(null)
+  const [line, setLine] = useState<{ x1: number; y1: number; x2: number; y2: number; axis: LevelAxis } | null>(null)
   /** The angle a turn has reached, shown beside the pointer. */
   const [turning, setTurning] = useState<{ x: number; y: number; angle: number } | null>(null)
   /** The gesture in progress, and how to abandon it. */
@@ -97,7 +98,7 @@ export function CropOverlay({ width, height }: { width: number; height: number }
    * to make it so. From the Level button, or ⌘/Ctrl-drag anywhere on the
    * frame, the way Lightroom's straighten tool is reached.
    */
-  const startHorizon = (event: React.PointerEvent) => {
+  const startHorizon = (event: React.PointerEvent, axis: LevelAxis = 'auto') => {
     const root = rootRef.current
     if (!root) return
     if (!isPrimary(event)) return
@@ -106,14 +107,14 @@ export function CropOverlay({ width, height }: { width: number; height: number }
     const origin = root.getBoundingClientRect()
     const x1 = event.clientX - origin.left
     const y1 = event.clientY - origin.top
-    setLine({ x1, y1, x2: x1, y2: y1 })
+    setLine({ x1, y1, x2: x1, y2: y1, axis })
     const target = event.currentTarget as Element
     target.setPointerCapture(event.pointerId)
 
     let last = { x: event.clientX, y: event.clientY }
     const move = (e: PointerEvent) => {
       last = { x: e.clientX, y: e.clientY }
-      setLine({ x1, y1, x2: e.clientX - origin.left, y2: e.clientY - origin.top })
+      setLine({ x1, y1, x2: e.clientX - origin.left, y2: e.clientY - origin.top, axis })
     }
     const end = (commit: boolean) => () => {
       window.removeEventListener('pointermove', move)
@@ -122,7 +123,7 @@ export function CropOverlay({ width, height }: { width: number; height: number }
       target.removeEventListener('lostpointercapture', cancel)
       setLine(null)
       if (commit) {
-        const angle = horizonAngle(stored.angle, last.x - event.clientX, last.y - event.clientY)
+        const angle = horizonAngle(stored.angle, last.x - event.clientX, last.y - event.clientY, axis)
         // A slip leaves the mode on, so the next attempt needs no second click.
         if (angle === null) return
         if (angle !== stored.angle) updateCrop({ angle })
@@ -328,7 +329,11 @@ export function CropOverlay({ width, height }: { width: number; height: number }
       </div>
 
       {drawingHorizon && (
-        <div className="crop__horizon" onPointerDown={startHorizon} aria-label="Draw along the horizon" />
+        <div
+          className="crop__horizon"
+          onPointerDown={(e) => startHorizon(e, levelAxis)}
+          aria-label={levelAxis === 'vertical' ? 'Draw along something upright' : 'Draw along the horizon'}
+        />
       )}
       {line && <HorizonLine {...line} current={stored.angle} />}
       {turning && (
@@ -345,8 +350,22 @@ function formatAngle(angle: number) {
 }
 
 /** The line as it is drawn, and the angle letting go would set. */
-function HorizonLine({ x1, y1, x2, y2, current }: { x1: number; y1: number; x2: number; y2: number; current: number }) {
-  const angle = horizonAngle(current, x2 - x1, y2 - y1)
+function HorizonLine({
+  x1,
+  y1,
+  x2,
+  y2,
+  axis,
+  current,
+}: {
+  x1: number
+  y1: number
+  x2: number
+  y2: number
+  axis: LevelAxis
+  current: number
+}) {
+  const angle = horizonAngle(current, x2 - x1, y2 - y1, axis)
   return (
     <svg className="crop__line" aria-hidden>
       <line x1={x1} y1={y1} x2={x2} y2={y2} className="crop__line-halo" />

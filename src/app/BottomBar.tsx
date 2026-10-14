@@ -1,6 +1,7 @@
 import { useEditor, useRenderEdits } from '../editor/edit-stack/store'
 import { exportLayoutFor } from '../io/export'
-import { IconCamera, IconLens, IconMinus, IconPlus, IconSplit } from './ui/icons'
+import { IconCamera, IconLens, IconMinus, IconPlus, IconSparkle, IconSplit } from './ui/icons'
+import { SCENE_LABEL } from '../editor/auto-look/scene'
 import { GRID_DENSITIES } from '../editor/edit-stack/grid'
 
 const ZOOM_STEPS = [0.25, 0.33, 0.5, 0.66, 1, 1.5, 2, 3, 4]
@@ -18,6 +19,8 @@ export function BottomBar({ scale, fitScale }: { scale: number; fitScale: number
   const edits = useRenderEdits()
   const setExifOpen = useEditor((s) => s.setExifOpen)
   const meta = photo?.meta
+  const autoLook = useEditor((s) => s.autoLook)
+  const scene = photo && autoLook?.frameId === photo.frameId ? autoLook.scene : null
 
   /**
    * What this photo currently *is*, in pixels.
@@ -101,6 +104,17 @@ export function BottomBar({ scale, fitScale }: { scale: number; fitScale: number
             </span>
           )}
         </button>
+      )}
+
+      {/* What the photo is of, as the auto look read it — on this device, nothing uploaded. */}
+      {scene && (
+        <span
+          className="bottombar__scene"
+          title={`35mm read this as ${SCENE_LABEL[scene.scene].toLowerCase()} (${Math.round(scene.confidence * 100)}%, ${scene.source === 'model' ? 'from the classifier' : 'from the picture’s statistics'}) and shaped the auto look to suit`}
+        >
+          <IconSparkle size={12} />
+          {SCENE_LABEL[scene.scene]}
+        </span>
       )}
 
       <div className="bottombar__spacer" />

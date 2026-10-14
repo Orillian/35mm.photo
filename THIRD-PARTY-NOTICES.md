@@ -26,6 +26,7 @@ dependencies — is not covered here. None of it is shipped to the browser.
 | [U²-Netp](https://github.com/xuebinqin/U-2-Net) weights (`public/models/u2netp.onnx`) | — | **Apache-2.0** | xuebinqin/U-2-Net |
 | [MI-GAN](https://github.com/Picsart-AI-Research/MI-GAN) weights (`public/models/migan.onnx`) | Places2 512 | MIT | Picsart-AI-Research/MI-GAN |
 | [Real-ESRGAN](https://github.com/xinntao/Real-ESRGAN) general x4 v3 weights (`public/models/realesr-general-x4v3.onnx`) | v0.2.5.0 | BSD-3-Clause | xinntao/Real-ESRGAN |
+| [MobileNetV2](https://github.com/onnx/models) ImageNet weights, int8 (`public/models/mobilenetv2-12-int8.onnx`) | Model Zoo `mobilenetv2-12-int8` | Apache-2.0 | onnx/models |
 | [Lensfun](https://lensfun.github.io/) lens database, as JSON (`public/lensdb/`) | see `public/lensdb/ATTRIBUTION.md` | **CC BY-SA 3.0** (data, not code) | lensfun/lensfun |
 
 ### A note on the LibRaw wrapper
@@ -123,6 +124,20 @@ reproduced below; nothing here is endorsed by anyone.
 > CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
 > ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 > POSSIBILITY OF SUCH DAMAGE.
+
+### The scene classifier
+
+`public/models/mobilenetv2-12-int8.onnx` is MobileNetV2 trained on ImageNet-1k,
+from Sandler et al., *MobileNetV2: Inverted Residuals and Linear Bottlenecks*
+(CVPR 2018), as published in the ONNX Model Zoo under **Apache-2.0** and used
+unaltered (SHA-256
+`cc028fe6cae7bc11a4ff53cfc9b79c920e8be65ce33a904ec3e2a8f66d77f95f`). It gives
+the auto look its scene tag. ImageNet-1k's class list is the Model Zoo's
+`synset.txt`; the table that maps those classes to a handful of scenes is this
+project's own, in `src/editor/auto-look/scene-classes.ts`.
+
+Apache-2.0 asks that the licence and any notices travel with the work, which
+this file is for; the model carries no NOTICE file of its own.
 
 ### What is *not* shipped
 

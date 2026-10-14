@@ -75,6 +75,21 @@ vi.mock('../../subject/detect', async (orig) => ({
   primeSubjects: vi.fn(),
   isModelCached: vi.fn(async () => false),
 }))
+// The analysis runs in a worker over a canvas copy; here the statistics of a
+// dim, warm, flat picture stand in, and the classifier has no model.
+vi.mock('../auto-look/analysis', async () => {
+  const { imageStats } = await import('../auto-look/stats')
+  const { picture, ripple } = await import('../auto-look/fixtures')
+  const p = picture(64, 48, (x: number, y: number) => {
+    const v = 52 + ripple(x, y, 6)
+    return [v + 14, v + 4, v - 10] as [number, number, number]
+  })
+  return {
+    measure: vi.fn(async () => imageStats(p.rgba, p.width, p.height)),
+    classify: vi.fn(async () => null),
+    locateSubject: vi.fn(async () => null),
+  }
+})
 vi.mock('../../io/file-system', async (orig) => ({
   ...(await orig<typeof import('../../io/file-system')>()),
   saveBlob: vi.fn(
@@ -358,6 +373,90 @@ describe('undoing an upscale', () => {
     expect(useEditor.getState().edits.upscale).toBe(2)
     await settle()
     expect(spy).toHaveBeenCalled()
+  })
+})
+
+describe('the white picker', () => {
+  it('sets warmth and tint together from a cast grey, and puts the picker away', async () => {
+    const { whiteBalanceGain } = await import('../gpu/whitebalance')
+    await useEditor.getState().openFiles([{ file: photoFile() }])
+    useEditor.getState().setWbPicking(true)
+    const [gr, gg, gb] = whiteBalanceGain(3400, 10)
+    useEditor.getState().applyWhitePick([0.4 / gr, 0.4 / gg, 0.4 / gb])
+    const { edits, wbPicking } = useEditor.getState()
+    expect(Math.abs(edits.temperature - 3400)).toBeLessThanOrEqual(20)
+    expect(Math.abs(edits.tint - 10)).toBeLessThanOrEqual(1)
+    expect(wbPicking).toBe(false)
+  })
+
+  it('explains a sample it cannot use and leaves the sliders alone', async () => {
+    await useEditor.getState().openFiles([{ file: photoFile() }])
+    const before = useEditor.getState().edits.temperature
+    useEditor.getState().setWbPicking(true)
+    useEditor.getState().applyWhitePick([1, 0.95, 0.9])
+    expect(useEditor.getState().edits.temperature).toBe(before)
+    expect(lastToast()).toMatch(/clipped/)
+    // One click is one answer, even a refusal: the picker closes either way.
+    expect(useEditor.getState().wbPicking).toBe(false)
+  })
+
+  it('is put away when another photo opens', async () => {
+    await useEditor.getState().openFiles([{ file: photoFile() }])
+    useEditor.getState().setWbPicking(true)
+    await useEditor.getState().openFiles([{ file: photoFile() }])
+    expect(useEditor.getState().wbPicking).toBe(false)
+  })
+})
+
+describe('the auto look', () => {
+  const settle = () => new Promise((r) => setTimeout(r, 5))
+
+  it('is made for the photo as it opens, and names it', async () => {
+    await useEditor.getState().openFiles([{ file: photoFile() }])
+    await settle()
+    const { autoLook, photo } = useEditor.getState()
+    expect(autoLook?.frameId).toBe(photo?.frameId)
+    expect(autoLook?.look?.kind).toBe('look')
+    expect(autoLook?.look?.name).toMatch(/Lift|Balance|Crisp|Bloom|Dusk|Mono/)
+    expect(autoLook?.classifying).toBe(false)
+    // An offer, not an edit: nothing on the stack yet.
+    expect(useEditor.getState().edits.exposure).toBe(0)
+    expect(useEditor.getState().history.past).toHaveLength(0)
+  })
+
+  it('lands on the stack as one step when applied, film look and all', async () => {
+    await useEditor.getState().openFiles([{ file: photoFile() }])
+    await settle()
+    const look = useEditor.getState().autoLook!.look!
+    useEditor.getState().applyAutoLook()
+    const { edits, history } = useEditor.getState()
+    expect(edits.exposure).toBe(look.edits.exposure)
+    expect(edits.look.id).toBe(look.lookId)
+    expect(history.past).toHaveLength(1)
+    useEditor.getState().undo()
+    expect(useEditor.getState().edits.exposure).toBe(0)
+  })
+
+  it('can be kept as a preset of the user’s own', async () => {
+    await useEditor.getState().openFiles([{ file: photoFile() }])
+    await settle()
+    const name = useEditor.getState().autoLook!.look!.name
+    await useEditor.getState().saveAutoLook()
+    const saved = useEditor.getState().presets.find((p) => p.name === name)
+    expect(saved).toMatchObject({ kind: 'parametric', format: 'auto' })
+    expect(saved?.edits?.exposure).toBeGreaterThan(0)
+  })
+
+  it('does nothing when switched off, and clears when the photo closes', async () => {
+    useEditor.getState().setAutoLookOn(false)
+    await useEditor.getState().openFiles([{ file: photoFile() }])
+    await settle()
+    expect(useEditor.getState().autoLook).toBeNull()
+    useEditor.getState().setAutoLookOn(true)
+    await settle()
+    expect(useEditor.getState().autoLook?.look).toBeTruthy()
+    useEditor.getState().closePhoto()
+    expect(useEditor.getState().autoLook).toBeNull()
   })
 })
 

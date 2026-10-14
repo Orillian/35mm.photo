@@ -1,4 +1,6 @@
-import { useRef } from 'react'
+import { useMemo, useRef } from 'react'
+import { IconSparkle } from '../../app/ui/icons'
+import { SCENE_LABEL } from '../auto-look/scene'
 import { Slider, formatPlain } from '../../app/ui/Slider'
 import { useEditor, useRenderEdits } from '../edit-stack/store'
 import { LOOKS } from '../presets/looks'
@@ -26,12 +28,42 @@ export function LooksTool() {
   const importPresets = useEditor((s) => s.importPresets)
   const deletePreset = useEditor((s) => s.deletePreset)
   const setPresetInputSpace = useEditor((s) => s.setPresetInputSpace)
+  const autoLook = useEditor((s) => s.autoLook)
+  const autoLookOn = useEditor((s) => s.autoLookOn)
+  const setAutoLookOn = useEditor((s) => s.setAutoLookOn)
+  const applyAutoLook = useEditor((s) => s.applyAutoLook)
+  const saveAutoLook = useEditor((s) => s.saveAutoLook)
 
   const catalogue = useLooksCatalogue()
   const custom = useCustomLooks()
 
   const canvases: CanvasMap = useRef(new Map<string, HTMLCanvasElement | null>())
-  useLookPreviews(catalogue, photo?.preview ?? null, photo?.meta.orientation ?? 1, renderEdits, canvases)
+
+  // The auto look as a transient entry in the catalogue, so its swatch is
+  // drawn by the same hook as every other look's.
+  const auto = autoLook && photo && autoLook.frameId === photo.frameId ? autoLook : null
+  const autoConfig = useMemo<LookConfig | null>(() => {
+    const look = auto?.look
+    if (!look) return null
+    return {
+      id: `auto:${auto.frameId}:${look.name}`,
+      name: look.name,
+      blurb: 'Made for this photo',
+      grain: { amount: 0, size: 50, shadowBias: 0.5 },
+      defaultStrength: 100,
+      custom: {
+        id: `auto:${auto.frameId}`,
+        name: look.name,
+        kind: 'parametric',
+        format: 'auto',
+        filename: 'Auto look',
+        createdAt: 0,
+        edits: { ...look.edits, look: { id: look.lookId, strength: look.lookStrength } },
+      },
+    }
+  }, [auto])
+  const previewed = useMemo(() => (autoConfig ? [autoConfig, ...catalogue] : catalogue), [autoConfig, catalogue])
+  useLookPreviews(previewed, photo?.preview ?? null, photo?.meta.orientation ?? 1, renderEdits, canvases)
 
   const activeId = edits.look.id
   const active = catalogue.find((l) => l.id === activeId) ?? null
@@ -45,6 +77,67 @@ export function LooksTool() {
 
   return (
     <div className="tool">
+      {/* What 35mm made of this photo on opening: a look built for it, or a
+          built-in one to try when the photo was fine already. An offer, not
+          an edit, until it is clicked. */}
+      <section className="looks__section looks__auto">
+        <header className="looks__section-head">
+          <span className="looks__section-name looks__ai">
+            <IconSparkle size={12} />
+            Auto
+          </span>
+          <span className="looks__section-note">
+            {!autoLookOn
+              ? 'Off'
+              : !photo
+                ? 'Looks at each photo as it opens'
+                : auto?.look
+                  ? auto.scene
+                    ? `${SCENE_LABEL[auto.scene.scene]}${auto.classifying ? ' · still looking' : ''}`
+                    : auto.classifying
+                      ? 'Still looking…'
+                      : 'Nothing in particular'
+                  : 'Looking at the photo…'}
+          </span>
+          <label className="mask-toggle looks__auto-toggle">
+            <input type="checkbox" checked={autoLookOn} onChange={(e) => setAutoLookOn(e.target.checked)} />
+            <span>On open</span>
+          </label>
+        </header>
+
+        {autoLookOn && photo && autoConfig && auto?.look && (
+          <div className="looks__grid">
+            <div className="look look--custom">
+              <button
+                className="look__pick"
+                onClick={applyAutoLook}
+                title={
+                  auto.look.kind === 'suggest'
+                    ? 'This photo looks fine as shot — here is a look to try on it'
+                    : 'Apply these adjustments; every one stays editable in the other panels'
+                }
+              >
+                <Swatch look={autoConfig} canvases={canvases} />
+                <span className="look__name">{auto.look.name}</span>
+              </button>
+              <span className="look__badge look__badge--auto" aria-hidden>
+                <IconSparkle size={8} />
+                AUTO
+              </span>
+            </div>
+            {auto.look.kind === 'look' && (
+              <p className="looks__auto-hint">
+                {Object.keys(auto.look.edits).length} adjustments
+                {auto.look.lookId ? ` and the ${LOOKS.find((l) => l.id === auto.look?.lookId)?.name ?? ''} look` : ''}.{' '}
+                <button className="link-button" onClick={() => void saveAutoLook()}>
+                  Save as preset
+                </button>
+              </p>
+            )}
+          </div>
+        )}
+      </section>
+
       {/* Grouped by the kind of rendering rather than listed flat: with this
           many looks a single grid is a wall of thumbnails, and the thing you
           are actually choosing between is the character, not the name. */}

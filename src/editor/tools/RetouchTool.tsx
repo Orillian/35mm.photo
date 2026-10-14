@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Slider } from '../../app/ui/Slider'
 import { useEditor } from '../edit-stack/store'
 import { DEFAULT_STRENGTH, FILL_MODEL, isFillModelCached, onRetouchBusy } from '../../retouch/retouch'
-import { IconCross, IconEye, IconEyeOff } from '../../app/ui/icons'
+import { IconCross, IconEye, IconEyeOff, IconSparkle } from '../../app/ui/icons'
 import { DEFAULT_BRUSH_SIZE, sizeToSlider, sliderToSize } from '../../retouch/brush'
 
 const BRUSH_HINT = {
@@ -105,7 +105,10 @@ export function RetouchTool() {
 
         <section className="tool__group">
           <header className="tool__group-head">
-            <span>Smart fill</span>
+            <span className="tool__ai">
+              <IconSparkle size={13} />
+              Smart fill
+            </span>
             {fillReady && (
               <label className="mask-toggle">
                 <input type="checkbox" checked={smartFill} onChange={(e) => setSmartFill(e.target.checked)} />
