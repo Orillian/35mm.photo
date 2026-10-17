@@ -10,6 +10,7 @@ import { SyncDialog } from '../SyncDialog'
 import { ExifDialog } from '../ExifDialog'
 import { ResetDialog } from '../ResetDialog'
 import { BatchBar } from '../BatchBar'
+import { Tour } from '../tour/Tour'
 import { Toasts } from '../Toasts'
 import { useEditor } from '../../editor/edit-stack/store'
 
@@ -54,6 +55,7 @@ export function PhoneShell() {
       <ExifDialog />
       <ResetDialog />
       <BatchBar />
+      <Tour />
       <Toasts />
     </div>
   )

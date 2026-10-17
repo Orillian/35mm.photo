@@ -15,6 +15,7 @@ import { SyncDialog } from './SyncDialog'
 import { ExifDialog } from './ExifDialog'
 import { ResetDialog } from './ResetDialog'
 import { BatchBar } from './BatchBar'
+import { Tour } from './tour/Tour'
 import { Toasts } from './Toasts'
 import { useKeyboard } from './useKeyboard'
 import { useDropTarget } from './useDropTarget'
@@ -153,6 +154,7 @@ export function App() {
       <ExifDialog />
       <ResetDialog />
       <BatchBar />
+      <Tour />
       <Toasts />
     </div>
   )

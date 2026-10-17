@@ -78,6 +78,7 @@ import type { InputSpace } from '../presets/inputSpace'
 import type { HistogramData } from '../histogram'
 import { guideTurns, loadCropGuide, saveCropGuide, type CropGuide } from './crop-guides'
 import * as db from '../../storage/indexeddb'
+import { tourSeen } from '../../app/tour/preference'
 
 export interface Toast {
   id: string
@@ -275,6 +276,8 @@ interface EditorState {
   maskMapsAt: number
   exportOpen: boolean
   aboutOpen: boolean
+  /** The first-run tour; open on a first visit, and from Help after that. */
+  tourOpen: boolean
   batch: BatchState
   syncOpen: boolean
   exifOpen: boolean
@@ -427,6 +430,7 @@ interface EditorState {
   setCropping: (on: boolean) => void
   setExportOpen: (open: boolean) => void
   setAboutOpen: (open: boolean) => void
+  setTourOpen: (open: boolean) => void
   setSyncOpen: (open: boolean) => void
   setExifOpen: (open: boolean) => void
   setResetOpen: (open: boolean) => void
@@ -531,6 +535,7 @@ export const useEditor = create<EditorState>((set, get) => ({
   detecting: false,
   exportOpen: false,
   aboutOpen: false,
+  tourOpen: !tourSeen(),
   syncOpen: false,
   exifOpen: false,
   resetOpen: false,
@@ -1934,6 +1939,10 @@ export const useEditor = create<EditorState>((set, get) => ({
   },
   setAboutOpen(open) {
     set({ aboutOpen: open })
+  },
+
+  setTourOpen(open) {
+    set({ tourOpen: open, aboutOpen: open ? false : get().aboutOpen })
   },
 
   setSyncOpen(open) {

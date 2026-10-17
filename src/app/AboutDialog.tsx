@@ -78,6 +78,7 @@ function DevelopCache() {
 export function AboutDialog() {
   const open = useEditor((s) => s.aboutOpen)
   const setOpen = useEditor((s) => s.setAboutOpen)
+  const setTourOpen = useEditor((s) => s.setTourOpen)
   const panelRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -166,6 +167,9 @@ export function AboutDialog() {
         </div>
 
         <footer className="modal__footer">
+          <button className="button" onClick={() => setTourOpen(true)}>
+            Take the tour
+          </button>
           <div className="modal__spacer" />
           <button className="button button--accent" onClick={() => setOpen(false)}>
             Close
